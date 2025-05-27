@@ -130,7 +130,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (logoutBtn) {
         logoutBtn.addEventListener('click', function() {
             auth.signOut().then(function() {
-                window.location.href = "home.html";
+                window.location.href = "index.html";
             });
         });
     }
