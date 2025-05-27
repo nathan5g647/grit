@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>Leaderboard</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <header>
+       <div class="grit-logo">
+    <svg viewBox="0 0 38 38" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="GRIT logo">
+        <circle cx="19" cy="19" r="18" stroke="#BF1A2F" stroke-width="3" fill="#4D7EA8"/>
+        <text x="50%" y="56%" text-anchor="middle" fill="#fff" font-size="16" font-family="Segoe UI, Arial, sans-serif" font-weight="bold" dy=".3em">GRIT</text>
+    </svg>
+</div>
+        <nav>
+            <a href="home.html">Home</a> |
+            <a href="dashboard.html">Dashboard</a> |
+            <a href="leaderboard.html">Leaderboard</a> |
+            <a href="statistic.html">Statistic</a> |
+            <a href="setting.html">Settings</a>
+        </nav>
+    </header>
+    <main style="max-width: 600px; margin: 0 auto;">
+        <section>
+            <h1>Leaderboard</h1>
+            <div>
+                <button id="usersBtn">Top 5 Users</button>
+                <button id="citiesBtn">Top 5 Cities</button>
+                <button id="countriesBtn">Top 5 Countries</button>
+            </div>
+            <table class="leaderboard-table" id="leaderboardTable">
+                <!-- Table content will be injected by JS -->
+            </table>
+            <div id="leaderboard"></div>
+        </section>
+    </main>
+    <script type="module" src="leaderboard.js"></script>
+</body>
+<footer>
+        <div class="footer-content">
+            &copy; 2025 GRIT &mdash; Track your progress. Stay motivated.
+        </div>
+    </footer>
+</html>

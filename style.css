@@ -1,0 +1,236 @@
+/* Base colors */
+:root {
+    --grit-red: #BF1A2F;
+    --grit-blue: #4D7EA8;
+    --grit-black: #000000;
+    --grit-green: #018E42;
+    --grit-gold: #F7D002;
+    --grit-bg: #f7f7f7;
+}
+
+/* General body and backgrounds */
+body {
+    background: var(--grit-bg);
+    color: var(--grit-black);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+/* Center all text for now, including tables */
+body, main, .grit-container, section, h1, h2, h3, h4, h5, h6, p, label, #progressStats, #streaks, form, nav, table, th, td {
+    text-align: center;
+}
+
+/* Header and nav */
+header {
+    background: var(--grit-blue);
+    color: #fff;
+    padding: 24px 0 8px 0; /* more top padding for logo */
+    border-bottom: 4px solid var(--grit-red);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+nav {
+    display: inline-block;
+    vertical-align: middle;
+    text-align: center;
+}
+nav a {
+    color: #fff;
+    text-decoration: none;
+    margin: 0 12px;
+    font-weight: bold;
+    transition: color 0.2s;
+}
+nav a:hover {
+    color: var(--grit-gold);
+}
+
+/* Logo */
+.grit-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 14px auto;
+    height: 120px;
+    width: 120px;
+    /* No overflow hidden! */
+    overflow: visible;
+}
+.grit-logo svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Main headings */
+h1, h2 {
+    color: var(--grit-blue);
+    text-align: center;
+    margin-top: 16px;
+}
+h1 {
+    font-size: 2.2em;
+    letter-spacing: 2px;
+}
+h2 {
+    font-size: 1.3em;
+    margin-bottom: 8px;
+}
+
+/* Section cards */
+section {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(77,126,168,0.07);
+    margin-bottom: 24px;
+    padding: 18px 20px;
+}
+
+/* Buttons */
+button, input[type="submit"] {
+    background: var(--grit-red);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 0.2s;
+}
+button:hover, input[type="submit"]:hover {
+    background: var(--grit-gold);
+    color: var(--grit-black);
+}
+
+/* Inputs and forms */
+input, select, textarea {
+    width: 95%;
+    max-width: 400px;
+    margin: 6px 0 12px 0;
+    padding: 8px;
+    border: 1.5px solid var(--grit-blue);
+    border-radius: 5px;
+    font-size: 1em;
+    background: #f9f9f9;
+    color: var(--grit-black);
+    box-sizing: border-box;
+}
+input:focus, select:focus, textarea:focus {
+    border-color: var(--grit-green);
+    outline: none;
+}
+
+/* Stats and highlights */
+#progressStats, #streaks {
+    background: var(--grit-white);
+    color: var(--grit-blue);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 18px;
+}
+#progressStats b, #streaks b {
+    color: var(--grit-black);
+}
+#currentStreak, #longestStreak {
+    color: var(--grit-green);
+    font-weight: bold;
+}
+
+/* Leaderboard highlights */
+.leaderboard-gold {
+    color: var(--grit-gold);
+    font-weight: bold;
+}
+.leaderboard-green {
+    color: var(--grit-green);
+    font-weight: bold;
+}
+
+/* Success and error messages */
+.success {
+    color: var(--grit-green);
+    font-weight: bold;
+}
+.error {
+    color: var(--grit-red);
+    font-weight: bold;
+}
+
+/* Center the leaderboard table and its content */
+.leaderboard-table {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.leaderboard-table, .leaderboard-table th, .leaderboard-table td {
+    text-align: center;
+}
+
+/* Footer style */
+footer {
+    background: var(--grit-blue);
+    color: #fff;
+    padding: 18px 0 12px 0;
+    text-align: center;
+    border-top: 3px solid var(--grit-red);
+    font-size: 1em;
+    letter-spacing: 1px;
+    width: 100vw;
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    z-index: 100;
+    margin: 0;
+    box-shadow: 0 -2px 8px rgba(77,126,168,0.07);
+}
+
+.footer-content {
+    max-width: 600px;
+    margin: 0 auto;
+    font-weight: 500;
+    letter-spacing: 1px;
+    opacity: 0.95;
+}
+
+/* Remove list markers everywhere */
+ul, ol {
+    list-style: none;
+    padding-left: 0;
+    margin-left: 0;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    main {
+        padding: 0 4px;
+    }
+    section {
+        padding: 10px 4px;
+    }
+}
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Make every input adjust width to its content */
+input,
+select,
+textarea {
+    width: auto;
+    min-width: 50px;    /* Optional: prevent too small */
+    max-width: 400px;   /* Optional: prevent too large */
+    box-sizing: border-box;
+    padding: 4px;
+    font-family: inherit;
+    font-size: inherit;
+}

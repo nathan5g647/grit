@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>GRIT - Home</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <header style="margin-bottom: 24px; padding-bottom: 10px;">
+      <div class="grit-logo">
+    <svg viewBox="0 0 38 38" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="GRIT logo">
+        <circle cx="19" cy="19" r="18" stroke="#BF1A2F" stroke-width="3" fill="#4D7EA8"/>
+        <text x="50%" y="56%" text-anchor="middle" fill="#fff" font-size="16" font-family="Segoe UI, Arial, sans-serif" font-weight="bold" dy=".3em">GRIT</text>
+    </svg>
+</div>
+        <nav>
+            <a href="home.html">Home</a> |
+            <a href="dashboard.html">Dashboard</a> |
+            <a href="leaderboard.html">Leaderboard</a> |
+            <a href="statistic.html">Statistic</a> |
+            <a href="setting.html">Settings</a>
+        </nav>
+    </header>
+
+    <main style="max-width: 400px; margin: 0 auto;">
+        <h1 style="text-align:center;">Welcome to GRIT</h1>
+        <p style="text-align:center;">Track your training, monitor your progress, and compete on the leaderboard!</p>
+
+        <section style="margin-bottom: 24px;">
+            <h2>What is GRIT?</h2>
+            <p>
+                <b>GRIT</b> is your all-in-one platform for tracking endurance and strength training. Log your workouts, analyze your progress, and stay motivated with powerful statistics and streak tracking.
+            </p>
+        </section>
+
+        <section style="margin-bottom: 24px;">
+            <h2>Key Features</h2>
+            <p>
+                <b>Personal Dashboard:</b> Add and review your trainings, including intervals, distance, duration, heart rate, and RPE. Instantly see your latest sessions and detailed stats.
+            </p>
+            <p>
+                <b>Statistics:</b> Visualize your progress over time. See your total GRIT points, distance, training time, and streaks for any period (week, month, year, or all time).
+            </p>
+            <p>
+                <b>Leaderboard:</b> Compete with friends and the community. Climb the leaderboard by earning GRIT points through consistent and challenging workouts.
+            </p>
+            <p>
+                <b>Streaks & Motivation:</b> Stay on track with streak tracking and personal bests. Celebrate your longest streaks and keep your momentum going!
+            </p>
+            <p>
+                <b>Fatigue Penalty:</b> GRIT rewards consistency, but also considers recovery. Training too hard, too often, will reduce your GRIT score due to a fatigue penalty. This encourages smart training and rest, not just volume!
+            </p>
+            
+        </section>
+
+        <section style="margin-bottom: 24px;">
+            <h2>Why Use GRIT?</h2>
+            <p>
+                Whether you're a runner, cyclist, swimmer, or just want to stay active, GRIT helps you stay accountable and motivated. All your data is securely stored and accessible from anywhere.
+            </p>
+            <p>
+                GRIT is designed to motivate you to train regularly, but also to train smart. The fatigue penalty means that rest and recovery are just as important as effort. Push your limits, but listen to your body!
+            </p>
+        </section>
+
+        <section id="authSection">
+            <h2 id="signupHeading">Sign Up</h2>
+            <form id="signupForm">
+                <input type="text" id="signupUsername" placeholder="Username" required /><br />
+                <input type="text" id="signupName" placeholder="Name" required /><br />
+                <select id="signupSex" required>
+                    <option value="">Sex</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                </select><br />
+                <input type="date" id="signupDob" placeholder="Date of Birth" required /> <br />
+                <input type="text" id="signupCity" placeholder="City" required /><br />
+                <input type="text" id="signupState" placeholder="State" /><br />
+                <input type="text" id="signupCountry" placeholder="Country" required /><br />
+                <input type="email" id="signupEmail" placeholder="Email" required /><br />
+                <input type="password" id="signupPassword" placeholder="Password" required /><br />
+                <button type="submit">Sign Up</button>
+            </form>
+            <div id="signupMessage" style="color: #a00; margin-bottom: 16px;"></div>
+
+            <h2 id="loginHeading">Login</h2>
+            <form id="loginForm">
+                <input type="email" id="email" placeholder="Email" required />
+                <input type="password" id="password" placeholder="Password" required />
+                <button type="submit">Login</button>
+            </form>
+            <div id="loginMessage" style="color: #a00;"></div>
+        </section>
+    </main>
+
+    <script type="module">
+    import { auth, db, ensureUserDocExists } from './script.js';
+    import { doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+    import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
+
+    // Show/hide forms and buttons based on auth state
+    onAuthStateChanged(auth, function(user) {
+        const signupForm = document.getElementById('signupForm');
+        const loginForm = document.getElementById('loginForm');
+        const signupHeading = document.getElementById('signupHeading');
+        const loginHeading = document.getElementById('loginHeading');
+        if (user) {
+            if (signupForm) signupForm.style.display = 'none';
+            if (loginForm) loginForm.style.display = 'none';
+            if (signupHeading) signupHeading.style.display = 'none';
+            if (loginHeading) loginHeading.style.display = 'none';
+        } else {
+            if (signupForm) signupForm.style.display = '';
+            if (loginForm) loginForm.style.display = '';
+            if (signupHeading) signupHeading.style.display = '';
+            if (loginHeading) loginHeading.style.display = '';
+        }
+    });
+
+    // Sign up logic
+    document.getElementById('signupForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const username = document.getElementById('signupUsername').value.trim();
+        const email = document.getElementById('signupEmail').value;
+        const password = document.getElementById('signupPassword').value;
+        const name = document.getElementById('signupName').value;
+        const sex = document.getElementById('signupSex').value;
+        const dob = document.getElementById('signupDob').value;
+        const city = document.getElementById('signupCity').value;
+        const state = document.getElementById('signupState').value;
+        const country = document.getElementById('signupCountry').value;
+
+        createUserWithEmailAndPassword(auth, email, password)
+            .then(async (userCredential) => {
+                await ensureUserDocExists(userCredential.user.uid);
+                // Save extra info to Firestore settings/profile using UID as doc ID
+                return setDoc(doc(db, "users", userCredential.user.uid, "settings", "profile"), {
+                    sex: sex,
+                    dob: dob,
+                    city: city,
+                    name: name,
+                    state: state,
+                    country: country,
+                    email: email,
+                    username: username
+                }).then(() => {
+                    document.getElementById('signupMessage').textContent = "Sign up successful! Redirecting...";
+                    setTimeout(() => {
+                        window.location.href = "dashboard.html";
+                    }, 1000);
+                });
+            })
+            .catch((error) => {
+                document.getElementById('signupMessage').textContent = error.message;
+            });
+    });
+
+    // Login logic
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        signInWithEmailAndPassword(auth, email, password)
+            .then(() => {
+                document.getElementById('loginMessage').textContent = "Login successful!";
+                window.location.href = "dashboard.html";
+            })
+            .catch((error) => {
+                document.getElementById('loginMessage').textContent = error.message;
+            });
+    });
+    </script>
+</body>
+<footer>
+        <div class="footer-content">
+            &copy; 2025 GRIT &mdash; Track your progress. Stay motivated.
+        </div>
+    </footer>
+</html>
