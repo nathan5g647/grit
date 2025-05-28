@@ -52,149 +52,182 @@
         </div>
     </main>
     <script type="module">
-        import { db, auth } from './script.js';
-        import { collection, getDocs } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
-        import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
+import { db, auth } from './script.js';
+import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
 
-        let allTrainings = []; // cache all trainings for the session
+let allTrainings = []; // cache all trainings for the session
 
-        function formatTime(minutes) {
-            const h = Math.floor(minutes / 60);
-            const m = Math.floor(minutes % 60);
-            return `${h}h ${m}m`;
-        }
+function formatTime(minutes) {
+    const h = Math.floor(minutes / 60);
+    const m = Math.floor(minutes % 60);
+    return `${h}h ${m}m`;
+}
 
-        function isWithinPeriod(date, period) {
-            const now = new Date();
-            const d = new Date(date);
-            if (period === "week") {
-                const weekAgo = new Date(now);
-                weekAgo.setDate(now.getDate() - 7);
-                return d >= weekAgo;
-            }
-            if (period === "month") {
-                const monthAgo = new Date(now);
-                monthAgo.setMonth(now.getMonth() - 1);
-                return d >= monthAgo;
-            }
-            if (period === "year") {
-                const yearAgo = new Date(now);
-                yearAgo.setFullYear(now.getFullYear() - 1);
-                return d >= yearAgo;
-            }
-            return true; // allTime
-        }
+function isWithinPeriod(date, period) {
+    const now = new Date();
+    const d = new Date(date);
+    if (period === "week") {
+        const weekAgo = new Date(now);
+        weekAgo.setDate(now.getDate() - 7);
+        return d >= weekAgo;
+    }
+    if (period === "month") {
+        const monthAgo = new Date(now);
+        monthAgo.setMonth(now.getMonth() - 1);
+        return d >= monthAgo;
+    }
+    if (period === "year") {
+        const yearAgo = new Date(now);
+        yearAgo.setFullYear(now.getFullYear() - 1);
+        return d >= yearAgo;
+    }
+    return true; // allTime
+}
 
-        function calculateStreaks(trainingDates) {
-            if (trainingDates.length === 0) return { current: 0, longest: 0 };
-            trainingDates.sort((a, b) => b - a);
-            let longest = 1, current = 1, temp = 1;
-            let today = new Date();
-            let trainedToday = trainingDates[0].toDateString() === today.toDateString();
-            for (let i = 0; i < trainingDates.length - 1; i++) {
-                let diff = (trainingDates[i] - trainingDates[i + 1]) / (1000 * 60 * 60 * 24);
-                if (diff <= 1.1) {
-                    temp++;
-                } else {
-                    if (i === 0 && trainedToday) current = temp;
-                    if (temp > longest) longest = temp;
-                    temp = 1;
-                }
-            }
+function calculateStreaks(trainingDates) {
+    if (trainingDates.length === 0) return { current: 0, longest: 0 };
+    trainingDates.sort((a, b) => b - a);
+    let longest = 1, current = 1, temp = 1;
+    let today = new Date();
+    let trainedToday = trainingDates[0].toDateString() === today.toDateString();
+    for (let i = 0; i < trainingDates.length - 1; i++) {
+        let diff = (trainingDates[i] - trainingDates[i + 1]) / (1000 * 60 * 60 * 24);
+        if (diff <= 1.1) {
+            temp++;
+        } else {
+            if (i === 0 && trainedToday) current = temp;
             if (temp > longest) longest = temp;
-            if (!trainedToday) current = 0;
-            return { current, longest };
+            temp = 1;
         }
+    }
+    if (temp > longest) longest = temp;
+    if (!trainedToday) current = 0;
+    return { current, longest };
+}
 
-        let currentPeriod = "week";
-        function setActiveButton(period) {
-            document.querySelectorAll('.periodBtn').forEach(btn => {
-                btn.disabled = btn.dataset.period === period;
-            });
-        }
+let currentPeriod = "week";
+function setActiveButton(period) {
+    document.querySelectorAll('.periodBtn').forEach(btn => {
+        btn.disabled = btn.dataset.period === period;
+    });
+}
 
-        function updateStatsFromCache(period) {
-            setActiveButton(period);
-            if (!allTrainings.length) {
-                document.getElementById('progressStats').innerHTML = "No trainings found.";
-                document.getElementById('currentStreak').textContent = "0";
-                document.getElementById('longestStreak').textContent = "0";
-                return;
+async function updateStatsFromCache(period) {
+    setActiveButton(period);
+    if (!allTrainings.length) {
+        document.getElementById('progressStats').innerHTML = "No trainings found.";
+        document.getElementById('currentStreak').textContent = "0";
+        document.getElementById('longestStreak').textContent = "0";
+        return;
+    }
+    let totalGrit = 0, totalTrainings = 0, totalDistance = 0, totalTime = 0;
+    allTrainings.forEach(t => {
+        const trainingDate = t.date ? new Date(t.date) : null;
+        if (
+            (period === "allTime") ||
+            (trainingDate && isWithinPeriod(trainingDate, period))
+        ) {
+            totalTrainings++;
+            if (typeof t.distance === 'number') {
+                totalDistance += t.distance;
+            } else if (t.intervals && Array.isArray(t.intervals)) {
+                totalDistance += t.intervals.reduce((sum, i) => sum + (parseFloat(i.distance) || 0), 0);
             }
-            let totalGrit = 0, totalTrainings = 0, totalDistance = 0, totalTime = 0;
-            allTrainings.forEach(t => {
-                const trainingDate = t.date ? new Date(t.date) : null;
-                if (
-                    (period === "allTime") ||
-                    (trainingDate && isWithinPeriod(trainingDate, period))
-                ) {
-                    totalTrainings++;
-                    if (typeof t.distance === 'number') {
-                        totalDistance += t.distance;
-                    } else if (t.intervals && Array.isArray(t.intervals)) {
-                        totalDistance += t.intervals.reduce((sum, i) => sum + (parseFloat(i.distance) || 0), 0);
+            if (typeof t.durationMinutes === 'number') {
+                totalTime += t.durationMinutes;
+            } else if (t.intervals && Array.isArray(t.intervals)) {
+                totalTime += t.intervals.reduce((sum, i) => {
+                    if (!i.duration) return sum;
+                    const parts = i.duration.split(':').map(Number);
+                    let minutes = 0;
+                    if (parts.length === 3) {
+                        minutes = parts[0] * 60 + parts[1] + parts[2] / 60;
+                    } else if (parts.length === 2) {
+                        minutes = parts[0] + parts[1] / 60;
+                    } else if (parts.length === 1) {
+                        minutes = parts[0];
                     }
-                    if (typeof t.durationMinutes === 'number') {
-                        totalTime += t.durationMinutes;
-                    } else if (t.intervals && Array.isArray(t.intervals)) {
-                        totalTime += t.intervals.reduce((sum, i) => {
-                            if (!i.duration) return sum;
-                            const parts = i.duration.split(':').map(Number);
-                            let minutes = 0;
-                            if (parts.length === 3) {
-                                minutes = parts[0] * 60 + parts[1] + parts[2] / 60;
-                            } else if (parts.length === 2) {
-                                minutes = parts[0] + parts[1] / 60;
-                            } else if (parts.length === 1) {
-                                minutes = parts[0];
-                            }
-                            return sum + minutes;
-                        }, 0);
-                    }
-                    if (typeof t.grit === 'number') {
-                        totalGrit += t.grit;
-                    }
-                }
-            });
-            document.getElementById('totalGrit').textContent = totalGrit;
-            document.getElementById('totalTrainings').textContent = totalTrainings;
-            document.getElementById('totalDistance').textContent = totalDistance.toFixed(2);
-            document.getElementById('totalTime').textContent = formatTime(totalTime);
+                    return sum + minutes;
+                }, 0);
+            }
+            if (typeof t.grit === 'number') {
+                totalGrit += t.grit;
+            }
+        }
+    });
+    document.getElementById('totalTrainings').textContent = totalTrainings;
+    document.getElementById('totalDistance').textContent = totalDistance.toFixed(2);
+    document.getElementById('totalTime').textContent = formatTime(totalTime);
 
-            // Always use all training dates for streaks
-            const allDates = allTrainings
+    // Always use all training dates for streaks, but filter by period for period streaks
+    const periodDates = allTrainings
         .map(t => t.date ? new Date(t.date) : null)
-        .filter(d => d);
-            const streaks = calculateStreaks(allDates);
+        .filter(d => d && ((period === "allTime") || isWithinPeriod(d, period)));
+    let streaks = calculateStreaks(periodDates);
+
+    // Fetch the saved GRIT score and streaks for the selected period
+    const user = auth.currentUser;
+    if (user) {
+        const gritDocRef = doc(db, "users", user.uid, "grit", period);
+        const gritDocSnap = await getDoc(gritDocRef);
+        if (gritDocSnap.exists()) {
+            const data = gritDocSnap.data();
+            if (typeof data.score === "number") {
+                document.getElementById('totalGrit').textContent = data.score.toFixed(2);
+            } else {
+                document.getElementById('totalGrit').textContent = totalGrit;
+            }
+            // If you store streaks in Firestore for each period:
+            if (typeof data.currentStreak === "number") {
+                document.getElementById('currentStreak').textContent = data.currentStreak;
+            } else {
+                document.getElementById('currentStreak').textContent = streaks.current;
+            }
+            if (typeof data.longestStreak === "number") {
+                document.getElementById('longestStreak').textContent = data.longestStreak;
+            } else {
+                document.getElementById('longestStreak').textContent = streaks.longest;
+            }
+        } else {
+            // fallback to calculated values
+            document.getElementById('totalGrit').textContent = totalGrit;
             document.getElementById('currentStreak').textContent = streaks.current;
             document.getElementById('longestStreak').textContent = streaks.longest;
         }
+    } else {
+        document.getElementById('totalGrit').textContent = totalGrit;
+        document.getElementById('currentStreak').textContent = streaks.current;
+        document.getElementById('longestStreak').textContent = streaks.longest;
+    }
+}
 
-        // Button event listeners
-        document.querySelectorAll('.periodBtn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                currentPeriod = btn.dataset.period;
-                updateStatsFromCache(currentPeriod);
-            });
-        });
+// Button event listeners
+document.querySelectorAll('.periodBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        currentPeriod = btn.dataset.period;
+        updateStatsFromCache(currentPeriod);
+    });
+});
 
-        // Auth and data loading
-        onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                document.getElementById('progressStats').innerHTML = "Please log in.";
-                document.getElementById('currentStreak').textContent = "0";
-                document.getElementById('longestStreak').textContent = "0";
-                return;
-            }
-            const trainingsRef = collection(db, "users", user.uid, "trainings");
-            const snapshot = await getDocs(trainingsRef);
-            allTrainings = [];
-            snapshot.forEach(doc => {
-                allTrainings.push(doc.data());
-            });
-            updateStatsFromCache(currentPeriod);
-        });
-    </script>
+// Auth and data loading
+onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+        document.getElementById('progressStats').innerHTML = "Please log in.";
+        document.getElementById('currentStreak').textContent = "0";
+        document.getElementById('longestStreak').textContent = "0";
+        return;
+    }
+    const trainingsRef = collection(db, "users", user.uid, "trainings");
+    const snapshot = await getDocs(trainingsRef);
+    allTrainings = [];
+    snapshot.forEach(doc => {
+        allTrainings.push(doc.data());
+    });
+
+    updateStatsFromCache(currentPeriod);
+});
+</script>
 </body>
 <footer>
         <div class="footer-content">
