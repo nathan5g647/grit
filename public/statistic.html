@@ -122,23 +122,22 @@
                 return;
             }
             let totalGrit = 0, totalTrainings = 0, totalDistance = 0, totalTime = 0;
-            const streakDates = [];
             allTrainings.forEach(t => {
                 const trainingDate = t.date ? new Date(t.date) : null;
-                if (!trainingDate || isWithinPeriod(trainingDate, period)) {
+                if (
+                    (period === "allTime") ||
+                    (trainingDate && isWithinPeriod(trainingDate, period))
+                ) {
                     totalTrainings++;
-                    // Distance: use t.distance if available, else sum intervals
                     if (typeof t.distance === 'number') {
                         totalDistance += t.distance;
                     } else if (t.intervals && Array.isArray(t.intervals)) {
                         totalDistance += t.intervals.reduce((sum, i) => sum + (parseFloat(i.distance) || 0), 0);
                     }
-                    // Duration: use t.durationMinutes if available, else sum intervals
                     if (typeof t.durationMinutes === 'number') {
                         totalTime += t.durationMinutes;
                     } else if (t.intervals && Array.isArray(t.intervals)) {
                         totalTime += t.intervals.reduce((sum, i) => {
-                            // Parse duration as HH:MM:SS or MM:SS or MM
                             if (!i.duration) return sum;
                             const parts = i.duration.split(':').map(Number);
                             let minutes = 0;
@@ -152,12 +151,9 @@
                             return sum + minutes;
                         }, 0);
                     }
-                    // GRIT points
                     if (typeof t.grit === 'number') {
                         totalGrit += t.grit;
                     }
-                    // For streaks, collect all dates
-                    if (trainingDate) streakDates.push(trainingDate);
                 }
             });
             document.getElementById('totalGrit').textContent = totalGrit;
@@ -165,8 +161,11 @@
             document.getElementById('totalDistance').textContent = totalDistance.toFixed(2);
             document.getElementById('totalTime').textContent = formatTime(totalTime);
 
-            // Streaks
-            const streaks = calculateStreaks(streakDates);
+            // Always use all training dates for streaks
+            const allDates = allTrainings
+        .map(t => t.date ? new Date(t.date) : null)
+        .filter(d => d);
+            const streaks = calculateStreaks(allDates);
             document.getElementById('currentStreak').textContent = streaks.current;
             document.getElementById('longestStreak').textContent = streaks.longest;
         }
