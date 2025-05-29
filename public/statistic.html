@@ -119,6 +119,7 @@ async function updateStatsFromCache(period) {
         document.getElementById('progressStats').innerHTML = "No trainings found.";
         document.getElementById('currentStreak').textContent = "0";
         document.getElementById('longestStreak').textContent = "0";
+        document.getElementById('totalGrit').textContent = "0";
         return;
     }
     let totalGrit = 0, totalTrainings = 0, totalDistance = 0, totalTime = 0;
@@ -173,22 +174,13 @@ async function updateStatsFromCache(period) {
         const gritDocSnap = await getDoc(gritDocRef);
         if (gritDocSnap.exists()) {
             const data = gritDocSnap.data();
-            if (typeof data.score === "number") {
-                document.getElementById('totalGrit').textContent = data.score.toFixed(2);
-            } else {
-                document.getElementById('totalGrit').textContent = totalGrit;
-            }
-            // If you store streaks in Firestore for each period:
-            if (typeof data.currentStreak === "number") {
-                document.getElementById('currentStreak').textContent = data.currentStreak;
-            } else {
-                document.getElementById('currentStreak').textContent = streaks.current;
-            }
-            if (typeof data.longestStreak === "number") {
-                document.getElementById('longestStreak').textContent = data.longestStreak;
-            } else {
-                document.getElementById('longestStreak').textContent = streaks.longest;
-            }
+            // --- Always show the saved value if it exists ---
+            document.getElementById('totalGrit').textContent =
+                typeof data.score === "number" ? data.score.toFixed(2) : totalGrit;
+            document.getElementById('currentStreak').textContent =
+                typeof data.currentStreak === "number" ? data.currentStreak : streaks.current;
+            document.getElementById('longestStreak').textContent =
+                typeof data.longestStreak === "number" ? data.longestStreak : streaks.longest;
         } else {
             // fallback to calculated values
             document.getElementById('totalGrit').textContent = totalGrit;
