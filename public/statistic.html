@@ -166,6 +166,40 @@ function calculateFatigue(trainings) {
     return trimp28 > 0 ? (trimp7 / trimp28) : 0;
 }
 
+// Add this function after calculateFatigue
+function displayFatigue(fatigue) {
+    const fatigueSpan = document.getElementById('currentFatigue');
+    let color = '';
+    let message = '';
+
+    if (fatigue < 0.80) {
+        color = 'var(--grit-blue)';
+        message = 'Might lead to detraining if maintained';
+    } else if (fatigue < 1.30) {
+        color = 'var(--grit-green)';
+        message = 'Best range for adaptation and progression';
+    } else if (fatigue < 1.5) {
+        color = 'var(--grit-gold)';
+        message = 'Monitor carefully';
+    } else {
+        color = 'var(--grit-red)';
+        message = 'High injury risk, not sustainable long-term';
+    }
+
+    fatigueSpan.textContent = fatigue.toFixed(2);
+    fatigueSpan.style.color = color;
+
+    // Add or update the message below the value
+    let msgElem = document.getElementById('fatigueMessage');
+    if (!msgElem) {
+        msgElem = document.createElement('div');
+        msgElem.id = 'fatigueMessage';
+        fatigueSpan.parentNode.appendChild(msgElem);
+    }
+    msgElem.textContent = message;
+    msgElem.style.color = color;
+}
+
 async function updateStatsFromCache(period) {
     setActiveButton(period);
 
@@ -248,7 +282,7 @@ async function updateStatsFromCache(period) {
 
     // After you fetch allTrainings:
     const fatigue = calculateFatigue(allTrainings);
-    document.getElementById('currentFatigue').textContent = fatigue.toFixed(2);
+    displayFatigue(fatigue);
 }
 
 // Button event listeners
