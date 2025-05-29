@@ -87,13 +87,26 @@ function isWithinPeriod(date, period) {
 
 function calculateStreaks(trainingDates) {
     if (trainingDates.length === 0) return { current: 0, longest: 0 };
-    trainingDates.sort((a, b) => b - a);
+
+    // Convert to date-only strings and get unique days
+    const uniqueDays = Array.from(
+        new Set(trainingDates.map(d => {
+            const day = new Date(d);
+            day.setHours(0, 0, 0, 0);
+            return day.getTime();
+        }))
+    ).sort((a, b) => b - a); // Descending order
+
+    if (uniqueDays.length === 0) return { current: 0, longest: 0 };
+
     let longest = 1, current = 1, temp = 1;
-    let today = new Date();
-    let trainedToday = trainingDates[0].toDateString() === today.toDateString();
-    for (let i = 0; i < trainingDates.length - 1; i++) {
-        let diff = (trainingDates[i] - trainingDates[i + 1]) / (1000 * 60 * 60 * 24);
-        if (diff <= 1.1) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let trainedToday = uniqueDays[0] === today.getTime();
+
+    for (let i = 0; i < uniqueDays.length - 1; i++) {
+        let diff = (uniqueDays[i] - uniqueDays[i + 1]) / (1000 * 60 * 60 * 24);
+        if (diff === 1) {
             temp++;
         } else {
             if (i === 0 && trainedToday) current = temp;
