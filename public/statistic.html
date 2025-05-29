@@ -174,18 +174,16 @@ async function updateStatsFromCache(period) {
         const gritDocSnap = await getDoc(gritDocRef);
         if (gritDocSnap.exists()) {
             const data = gritDocSnap.data();
-            // --- Always show the saved value if it exists ---
             document.getElementById('totalGrit').textContent =
-                typeof data.score === "number" ? data.score.toFixed(2) : totalGrit;
+                typeof data.score === "number" ? data.score.toFixed(2) : "0";
             document.getElementById('currentStreak').textContent =
-                typeof data.currentStreak === "number" ? data.currentStreak : streaks.current;
+                typeof data.currentStreak === "number" ? data.currentStreak : "0";
             document.getElementById('longestStreak').textContent =
-                typeof data.longestStreak === "number" ? data.longestStreak : streaks.longest;
+                typeof data.longestStreak === "number" ? data.longestStreak : "0";
         } else {
-            // fallback to calculated values
-            document.getElementById('totalGrit').textContent = totalGrit;
-            document.getElementById('currentStreak').textContent = streaks.current;
-            document.getElementById('longestStreak').textContent = streaks.longest;
+            document.getElementById('totalGrit').textContent = "0";
+            document.getElementById('currentStreak').textContent = "0";
+            document.getElementById('longestStreak').textContent = "0";
         }
     } else {
         document.getElementById('totalGrit').textContent = totalGrit;
