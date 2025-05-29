@@ -115,14 +115,40 @@ function setActiveButton(period) {
 
 async function updateStatsFromCache(period) {
     setActiveButton(period);
-    if (!allTrainings.length) {
-        document.getElementById('progressStats').innerHTML = "No trainings found.";
+
+    // Always show loading while fetching
+    document.getElementById('totalGrit').textContent = "Loading...";
+    document.getElementById('currentStreak').textContent = "Loading...";
+    document.getElementById('longestStreak').textContent = "Loading...";
+
+    const user = auth.currentUser;
+    if (!user) {
+        document.getElementById('progressStats').innerHTML = "Please log in.";
         document.getElementById('currentStreak').textContent = "0";
         document.getElementById('longestStreak').textContent = "0";
         document.getElementById('totalGrit').textContent = "0";
         return;
     }
-    let totalGrit = 0, totalTrainings = 0, totalDistance = 0, totalTime = 0;
+
+    // Fetch the saved GRIT score and streaks for the selected period
+    const gritDocRef = doc(db, "users", user.uid, "grit", period);
+    const gritDocSnap = await getDoc(gritDocRef);
+    if (gritDocSnap.exists()) {
+        const data = gritDocSnap.data();
+        document.getElementById('totalGrit').textContent =
+            typeof data.score === "number" ? data.score.toFixed(2) : "0";
+        document.getElementById('currentStreak').textContent =
+            typeof data.currentStreak === "number" ? data.currentStreak : "0";
+        document.getElementById('longestStreak').textContent =
+            typeof data.longestStreak === "number" ? data.longestStreak : "0";
+    } else {
+        document.getElementById('totalGrit').textContent = "0";
+        document.getElementById('currentStreak').textContent = "0";
+        document.getElementById('longestStreak').textContent = "0";
+    }
+
+    // You can still show calculated values for trainings, distance, and time if you want:
+    let totalTrainings = 0, totalDistance = 0, totalTime = 0;
     allTrainings.forEach(t => {
         const trainingDate = t.date ? new Date(t.date) : null;
         if (
@@ -152,44 +178,11 @@ async function updateStatsFromCache(period) {
                     return sum + minutes;
                 }, 0);
             }
-            if (typeof t.grit === 'number') {
-                totalGrit += t.grit;
-            }
         }
     });
     document.getElementById('totalTrainings').textContent = totalTrainings;
     document.getElementById('totalDistance').textContent = totalDistance.toFixed(2);
     document.getElementById('totalTime').textContent = formatTime(totalTime);
-
-    // Always use all training dates for streaks, but filter by period for period streaks
-    const periodDates = allTrainings
-        .map(t => t.date ? new Date(t.date) : null)
-        .filter(d => d && ((period === "allTime") || isWithinPeriod(d, period)));
-    let streaks = calculateStreaks(periodDates);
-
-    // Fetch the saved GRIT score and streaks for the selected period
-    const user = auth.currentUser;
-    if (user) {
-        const gritDocRef = doc(db, "users", user.uid, "grit", period);
-        const gritDocSnap = await getDoc(gritDocRef);
-        if (gritDocSnap.exists()) {
-            const data = gritDocSnap.data();
-            document.getElementById('totalGrit').textContent =
-                typeof data.score === "number" ? data.score.toFixed(2) : "0";
-            document.getElementById('currentStreak').textContent =
-                typeof data.currentStreak === "number" ? data.currentStreak : "0";
-            document.getElementById('longestStreak').textContent =
-                typeof data.longestStreak === "number" ? data.longestStreak : "0";
-        } else {
-            document.getElementById('totalGrit').textContent = "0";
-            document.getElementById('currentStreak').textContent = "0";
-            document.getElementById('longestStreak').textContent = "0";
-        }
-    } else {
-        document.getElementById('totalGrit').textContent = totalGrit;
-        document.getElementById('currentStreak').textContent = streaks.current;
-        document.getElementById('longestStreak').textContent = streaks.longest;
-    }
 }
 
 // Button event listeners
@@ -206,6 +199,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('progressStats').innerHTML = "Please log in.";
         document.getElementById('currentStreak').textContent = "0";
         document.getElementById('longestStreak').textContent = "0";
+        document.getElementById('totalGrit').textContent = "0";
         return;
     }
     const trainingsRef = collection(db, "users", user.uid, "trainings");
