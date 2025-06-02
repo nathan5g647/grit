@@ -56,16 +56,15 @@ nav a:hover {
     align-items: center;
     justify-content: center;
     margin: 0 auto 14px auto;
-    height: 120px;
-    width: 120px;
-    /* No overflow hidden! */
+    width: 275px;   /* match image size */
+    height: 250px;
     overflow: visible;
 }
 .grit-logo-img {
-    width: 100%;
-    height: 100%;
+    width: 275px;
+    height: 250px;
     object-fit: cover;
-    /* border-radius: 50%; */  /* Keep commented for rectangle */
+    /* border-radius: 0; */ /* Rectangle */
     display: block;
     margin: 0 auto;
 }
