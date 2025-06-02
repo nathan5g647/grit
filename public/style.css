@@ -61,16 +61,16 @@ nav a:hover {
     overflow: visible;
 }
 .grit-logo-img {
-    width: 275px;
-    height: 250px;
+    width: 475px;
+    height: 450px;
     object-fit: cover;
     /* border-radius: 0; */ /* Rectangle */
     display: block;
     margin: 0 auto;
 }
 .grit-logo img, .grit-logo-img {
-    width: 250;
-    height: 275px;
+    width: 475;
+    height: 450px;
     object-fit: cover;
     /* border-radius: 50%; */  /* Keep commented for rectangle */
     display: block;
