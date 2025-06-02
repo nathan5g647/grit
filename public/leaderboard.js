@@ -12,6 +12,30 @@ const PERIODS = [
     { key: "year", label: "Yearly" },
     { key: "allTime", label: "All Time" }
 ];
+function getPeriodStart(period) {
+    const now = new Date();
+    if (period === 'week') {
+        // Set to most recent Monday
+        const day = now.getDay(); // 0 (Sun) - 6 (Sat)
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is Sunday
+        const monday = new Date(now);
+        monday.setDate(diff);
+        monday.setHours(0, 0, 0, 0);
+        return monday;
+    }
+    if (period === 'month') {
+        const first = new Date(now.getFullYear(), now.getMonth(), 1);
+        first.setHours(0, 0, 0, 0);
+        return first;
+    }
+    if (period === 'year') {
+        const jan1 = new Date(now.getFullYear(), 0, 1);
+        jan1.setHours(0, 0, 0, 0);
+        return jan1;
+    }
+    // allTime: return a very old date
+    return new Date(2000, 0, 1);
+}
 
 function normalize(str) {
     if (!str) return "Unknown";
@@ -39,6 +63,15 @@ async function fetchAllLeaderboardData() {
             gritScores[doc.id] = doc.data().score || 0;
         });
 
+        // Get all trainings for this user
+        const trainingsSnap = await getDocs(collection(db, "users", userId, "trainings"));
+        const trainings = [];
+        trainingsSnap.forEach(doc => {
+            trainings.push({ id: doc.id, ...doc.data() });
+        });
+        // After fetching trainings
+        console.log("User trainings for", userId, trainings);
+
         allUsers.push({
             userId,
             username: normalize(profile.username) || userId,
@@ -49,7 +82,8 @@ async function fetchAllLeaderboardData() {
                 month: gritScores.month || 0,
                 year: gritScores.year || 0,
                 allTime: gritScores.allTime || 0
-            }
+            },
+            trainings
         });
     }
     return allUsers;
@@ -61,7 +95,7 @@ function getTopUsers(users, period) {
             username: u.username,
             city: u.city,
             country: u.country,
-            gritScore: u.grit[period] || 0
+            gritScore: sumGritForPeriod(u.trainings, period)
         }))
         .sort((a, b) => b.gritScore - a.gritScore)
         .slice(0, 5);
@@ -70,8 +104,9 @@ function getTopUsers(users, period) {
 function getTopCities(users, period) {
     const cityMap = {};
     users.forEach(u => {
-        if (!cityMap[u.city]) cityMap[u.city] = 0;
-        cityMap[u.city] += u.grit[period] || 0;
+        const city = u.city;
+        if (!cityMap[city]) cityMap[city] = 0;
+        cityMap[city] += sumGritForPeriod(u.trainings, period);
     });
     return Object.entries(cityMap)
         .map(([city, total]) => ({ city, total }))
@@ -82,8 +117,9 @@ function getTopCities(users, period) {
 function getTopCountries(users, period) {
     const countryMap = {};
     users.forEach(u => {
-        if (!countryMap[u.country]) countryMap[u.country] = 0;
-        countryMap[u.country] += u.grit[period] || 0;
+        const country = u.country;
+        if (!countryMap[country]) countryMap[country] = 0;
+        countryMap[country] += sumGritForPeriod(u.trainings, period);
     });
     return Object.entries(countryMap)
         .map(([country, total]) => ({ country, total }))
@@ -183,17 +219,37 @@ function renderCountriesTable(countries, periodLabel, allUsers, currentUsername)
     return html;
 }
 
+function sumGritForPeriod(trainings, period) {
+    if (period === "allTime") {
+        return trainings.reduce((sum, t) => sum + (t.gritPoints || t.gritScore || t.grit || 0), 0);
+    }
+    const periodStart = getPeriodStart(period);
+    return trainings
+        .filter(t => {
+            // Prefer t.date, fallback to t.createdAt
+            const dateStr = t.date || t.createdAt;
+            if (!dateStr) return false;
+            const d = new Date(dateStr);
+            return d >= periodStart;
+        })
+        .reduce((sum, t) => sum + (t.gritPoints || t.gritScore || t.grit || 0), 0);
+}
+
 async function showCategory(category) {
     leaderboardDiv.innerHTML = "Loading...";
     const users = await fetchAllLeaderboardData();
     let html = "";
-    for (const { key, label } of PERIODS) {
-        if (category === "users") {
-            html += renderUsersTable(getTopUsers(users, key), label, users, ""); // Pass the currentUsername as an empty string for now
-        } else if (category === "cities") {
-            html += renderCitiesTable(getTopCities(users, key), label, users, ""); // Pass the currentUsername as an empty string for now
-        } else if (category === "countries") {
-            html += renderCountriesTable(getTopCountries(users, key), label, users, ""); // Pass the currentUsername as an empty string for now
+    if (category === "users") {
+        for (const { key, label } of PERIODS) {
+            html += renderUsersTable(getTopUsers(users, key), label, users, "");
+        }
+    } else if (category === "cities") {
+        for (const { key, label } of PERIODS) {
+            html += renderCitiesTable(getTopCities(users, key), label, users, "");
+        }
+    } else if (category === "countries") {
+        for (const { key, label } of PERIODS) {
+            html += renderCountriesTable(getTopCountries(users, key), label, users, "");
         }
     }
     leaderboardDiv.innerHTML = html;
@@ -204,7 +260,7 @@ usersBtn.onclick = () => showCategory("users");
 citiesBtn.onclick = () => showCategory("cities");
 countriesBtn.onclick = () => showCategory("countries");
 
-// Show users by default
+// Show user leaderboard by default on page load
 showCategory("users");
 
 

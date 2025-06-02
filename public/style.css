@@ -61,10 +61,21 @@ nav a:hover {
     /* No overflow hidden! */
     overflow: visible;
 }
-.grit-logo svg {
+.grit-logo-img {
     width: 100%;
     height: 100%;
+    object-fit: cover;
+    /* border-radius: 50%; */  /* Keep commented for rectangle */
     display: block;
+    margin: 0 auto;
+}
+.grit-logo img, .grit-logo-img {
+    width: 450;
+    height: 475px;
+    object-fit: cover;
+    /* border-radius: 50%; */  /* Keep commented for rectangle */
+    display: block;
+    margin: 0 auto;
 }
 
 /* Main headings */

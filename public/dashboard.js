@@ -8,6 +8,30 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Store intervals in an array
     let intervals = [];
 
+    function getPeriodStart(period) {
+    const now = new Date();
+    if (period === 'week') {
+        // Set to most recent Monday
+        const day = now.getDay(); // 0 (Sun) - 6 (Sat)
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is Sunday
+        const monday = new Date(now.setDate(diff));
+        monday.setHours(0, 0, 0, 0);
+        return monday;
+    }
+    if (period === 'month') {
+        const first = new Date(now.getFullYear(), now.getMonth(), 1);
+        first.setHours(0, 0, 0, 0);
+        return first;
+    }
+    if (period === 'year') {
+        const jan1 = new Date(now.getFullYear(), 0, 1);
+        jan1.setHours(0, 0, 0, 0);
+        return jan1;
+    }
+    // allTime: return a very old date
+    return new Date(2000, 0, 1);
+}
+
     // Create preview container
     const previewDiv = document.createElement('div');
     previewDiv.id = 'trainingPreview';

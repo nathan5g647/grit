@@ -7,11 +7,8 @@
 </head>
 <body>
     <header>
-   <div class="grit-logo">
-    <svg viewBox="0 0 38 38" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="GRIT logo">
-        <circle cx="19" cy="19" r="18" stroke="#BF1A2F" stroke-width="3" fill="#4D7EA8"/>
-        <text x="50%" y="56%" text-anchor="middle" fill="#fff" font-size="16" font-family="Segoe UI, Arial, sans-serif" font-weight="bold" dy=".3em">GRIT</text>
-    </svg>
+  <div class="grit-logo">
+    <img src="image/logo.jpg" alt="GRIT Logo">
 </div>
         <nav>
             <a href="index.html">Home</a> |
@@ -37,8 +34,7 @@
                     <button class="periodBtn" data-period="year" id="btnYear">Yearly</button>
                     <button class="periodBtn" data-period="allTime" id="btnAllTime">All Time</button>
                 </div>
-            </section>
-            <section>
+           
                 <div id="progressStats">
                     <p><b>Total GRIT points:</b> <span id="totalGrit">Loading...</span></p>
                     <p><b>Total trainings:</b> <span id="totalTrainings">Loading...</span></p>
@@ -48,8 +44,7 @@
             </section>
             <section>
                 <h1>Streaks</h1>
-            </section>
-            <section>
+          
                 <div id="streaks">
                     <p><b>Current streak:</b> <span id="currentStreak">Loading...</span></p>
                     <p><b>Longest streak:</b> <span id="longestStreak">Loading...</span></p>
@@ -65,6 +60,30 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/fi
 
 let allTrainings = []; // cache all trainings for the session
 
+function getPeriodStart(period) {
+    const now = new Date();
+    if (period === 'week') {
+        // Set to most recent Monday
+        const day = now.getDay(); // 0 (Sun) - 6 (Sat)
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is Sunday
+        const monday = new Date(now.setDate(diff));
+        monday.setHours(0, 0, 0, 0);
+        return monday;
+    }
+    if (period === 'month') {
+        const first = new Date(now.getFullYear(), now.getMonth(), 1);
+        first.setHours(0, 0, 0, 0);
+        return first;
+    }
+    if (period === 'year') {
+        const jan1 = new Date(now.getFullYear(), 0, 1);
+        jan1.setHours(0, 0, 0, 0);
+        return jan1;
+    }
+    // allTime: return a very old date
+    return new Date(2000, 0, 1);
+}
+
 function formatTime(minutes) {
     const h = Math.floor(minutes / 60);
     const m = Math.floor(minutes % 60);
@@ -72,24 +91,9 @@ function formatTime(minutes) {
 }
 
 function isWithinPeriod(date, period) {
-    const now = new Date();
     const d = new Date(date);
-    if (period === "week") {
-        const weekAgo = new Date(now);
-        weekAgo.setDate(now.getDate() - 7);
-        return d >= weekAgo;
-    }
-    if (period === "month") {
-        const monthAgo = new Date(now);
-        monthAgo.setMonth(now.getMonth() - 1);
-        return d >= monthAgo;
-    }
-    if (period === "year") {
-        const yearAgo = new Date(now);
-        yearAgo.setFullYear(now.getFullYear() - 1);
-        return d >= yearAgo;
-    }
-    return true; // allTime
+    const periodStart = getPeriodStart(period);
+    return d >= periodStart;
 }
 
 function calculateStreaks(trainingDates) {
@@ -226,19 +230,29 @@ async function updateStatsFromCache(period) {
         .filter(d => d);
     const streaks = calculateStreaks(periodDates);
 
-    // Fetch the saved GRIT score and streaks for the selected period
+    // Calculate GRIT score for the selected period from trainings
+    const periodStart = getPeriodStart(period);
+    const gritScore = allTrainings
+        .filter(t => {
+            const dateStr = t.date || t.createdAt;
+            if (!dateStr) return false;
+            const d = new Date(dateStr);
+            return (period === "allTime") || (d >= periodStart);
+        })
+        .reduce((sum, t) => sum + (t.gritPoints || t.gritScore || t.grit || 0), 0);
+
+    document.getElementById('totalGrit').textContent = gritScore.toFixed(2);
+
+    // Optionally, you can still fetch and display streaks from Firestore as fallback
     const gritDocRef = doc(db, "users", user.uid, "grit", period);
     const gritDocSnap = await getDoc(gritDocRef);
     if (gritDocSnap.exists()) {
         const data = gritDocSnap.data();
-        document.getElementById('totalGrit').textContent =
-            typeof data.score === "number" ? data.score.toFixed(2) : "0";
         document.getElementById('currentStreak').textContent =
             typeof data.currentStreak === "number" ? data.currentStreak : streaks.current;
         document.getElementById('longestStreak').textContent =
             typeof data.longestStreak === "number" ? data.longestStreak : streaks.longest;
     } else {
-        document.getElementById('totalGrit').textContent = "0";
         document.getElementById('currentStreak').textContent = streaks.current;
         document.getElementById('longestStreak').textContent = streaks.longest;
     }
@@ -246,7 +260,8 @@ async function updateStatsFromCache(period) {
     // You can still show calculated values for trainings, distance, and time if you want:
     let totalTrainings = 0, totalDistance = 0, totalTime = 0;
     allTrainings.forEach(t => {
-        const trainingDate = t.date ? new Date(t.date) : null;
+        const dateStr = t.date || t.createdAt;
+        const trainingDate = dateStr ? new Date(dateStr) : null;
         if (
             (period === "allTime") ||
             (trainingDate && isWithinPeriod(trainingDate, period))
