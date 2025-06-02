@@ -70,8 +70,8 @@ nav a:hover {
     margin: 0 auto;
 }
 .grit-logo img, .grit-logo-img {
-    width: 450;
-    height: 475px;
+    width: 250;
+    height: 275px;
     object-fit: cover;
     /* border-radius: 50%; */  /* Keep commented for rectangle */
     display: block;
