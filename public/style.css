@@ -107,11 +107,11 @@ button, input[type="submit"] {
     color: #fff;
     border: none;
     border-radius: 6px;
-    padding: 8px 18px;
+    padding: 14px 28px;      /* Increased padding for bigger buttons */
     font-size: 1em;
     font-weight: bold;
     cursor: pointer;
-    margin-top: 8px;
+    margin: 18px 0 18px 0;   /* More space above and below buttons */
     transition: background 0.2s;
 }
 button:hover, input[type="submit"]:hover {
@@ -187,16 +187,12 @@ input:focus, select:focus, textarea:focus {
 footer {
     background: var(--grit-blue);
     color: #fff;
-    padding: 18px 0 12px 0;
+    padding: 28px 0 18px 0; /* Increased top and bottom padding */
     text-align: center;
     border-top: 3px solid var(--grit-red);
     font-size: 1em;
     letter-spacing: 1px;
     width: 100vw;
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    z-index: 100;
     margin: 0;
     box-shadow: 0 -2px 8px rgba(77,126,168,0.07);
 }
@@ -244,3 +240,15 @@ textarea {
     font-family: inherit;
     font-size: inherit;
 }
+
+/* Add at the end of your CSS file */
+
+html, body {
+    height: 100%;
+}
+
+
+main {
+    margin-bottom: 28px; /* Ensures at least 20px space above the footer */
+}
+

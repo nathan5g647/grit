@@ -105,6 +105,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const user = auth.currentUser;
         if (!user) return;
         const data = {
+            username: document.getElementById('username')?.value || '', // <-- Ensure username is saved
             sex: document.getElementById('sex')?.value || '',
             dob: document.getElementById('dob')?.value || '',
             city: normalizeName(document.getElementById('city').value),
@@ -115,6 +116,10 @@ window.addEventListener('DOMContentLoaded', () => {
         };
         try {
             await setDoc(doc(db, "users", user.uid, "settings", "profile"), data, { merge: true });
+            // Also save username at the root user document for global display
+            if (data.username) {
+                await setDoc(doc(db, "users", user.uid), { username: data.username }, { merge: true });
+            }
             displaySettingsAsText(data);
         } catch (error) {
             // Optionally handle error

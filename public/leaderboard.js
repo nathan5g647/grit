@@ -131,7 +131,17 @@ function renderUsersTable(users, periodLabel, allUsers, currentUsername) {
     let html = `<h3>${periodLabel} - Top 5 Users</h3>`;
     html += "<table border='1'><tr><th>Rank</th><th>Username</th><th>City</th><th>Country</th><th>GRIT Score</th></tr>";
     users.forEach((u, i) => {
-        html += `<tr><td>${i + 1}</td><td>${u.username}</td><td>${u.city}</td><td>${u.country}</td><td>${u.gritScore.toFixed(2)}</td></tr>`;
+        html += `<tr>
+            <td>${i + 1}</td>
+            <td>
+                <a href="profile.html?uid=${u.userId}" style="text-decoration:none;color:inherit;font-weight:bold;">
+                    ${u.username}
+                </a>
+            </td>
+            <td>${u.city}</td>
+            <td>${u.country}</td>
+            <td>${u.gritScore.toFixed(2)}</td>
+        </tr>`;
     });
     html += "</table>";
 
@@ -262,6 +272,45 @@ countriesBtn.onclick = () => showCategory("countries");
 
 // Show user leaderboard by default on page load
 showCategory("users");
+
+// Save the winner for a period in a separate "winners" collection in Firestore (not in users)
+async function saveLastWinner(period, users) {
+    if (!users || users.length === 0) return;
+    // Find the user with the highest gritScore for this period
+    const sorted = users
+        .map(u => ({
+            userId: u.userId,
+            username: u.username,
+            city: u.city,
+            country: u.country,
+            gritScore: sumGritForPeriod(u.trainings, period)
+        }))
+        .sort((a, b) => b.gritScore - a.gritScore);
+
+    const winner = sorted[0];
+    if (!winner || winner.gritScore <= 0) return;
+
+    // Save/overwrite the winner in a separate "winners" collection at winners/{period}
+    await setDoc(doc(db, "winners", period), {
+        userId: winner.userId,
+        username: winner.username,
+        city: winner.city,
+        country: winner.country,
+        gritScore: winner.gritScore,
+        timestamp: new Date()
+    });
+}
+
+// After fetching all users
+const users = await fetchAllLeaderboardData();
+
+// Save winners for each period (this will overwrite the winner for each period)
+await saveLastWinner("week", users);
+await saveLastWinner("month", users);
+await saveLastWinner("year", users);
+await saveLastWinner("allTime", users);
+
+// Then render the leaderboard
 
 
 

@@ -10,11 +10,13 @@
  <div class="grit-logo">
     <img src="image/logo.jpg" alt="GRIT Logo" class="grit-logo-img">
 </div>
-        <nav>
+         <nav>
+            <a href="search.html">Search Users</a> |
             <a href="index.html">Home</a> |
             <a href="dashboard.html">Dashboard</a> |
             <a href="leaderboard.html">Leaderboard</a> |
             <a href="statistic.html">Statistic</a> |
+            <a href="profile.html">Profile</a> |
             <a href="setting.html">Settings</a>
         </nav>
     </header>
@@ -54,11 +56,13 @@
         </div>
     </main>
     <script type="module">
+// filepath: c:\Users\Natha\OneDrive\Bureau\GRIT\public\statistic.html
 import { db, auth } from './script.js';
 import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
 
 let allTrainings = []; // cache all trainings for the session
+let streaks = { current: 0, longest: 0 };
 
 function getPeriodStart(period) {
     const now = new Date();
@@ -144,13 +148,6 @@ for (let i = 0; i < sortedDates.length; i++) {
     return { current, longest };
 }
 
-let currentPeriod = "week";
-function setActiveButton(period) {
-    document.querySelectorAll('.periodBtn').forEach(btn => {
-        btn.disabled = btn.dataset.period === period;
-    });
-}
-
 function calculateFatigue(trainings) {
     const now = new Date();
     let trimp7 = 0, trimp28 = 0, count7 = 0, count28 = 0;
@@ -204,31 +201,29 @@ function displayFatigue(fatigue) {
     msgElem.style.color = color;
 }
 
+let currentPeriod = "week";
+function setActiveButton(period) {
+    document.querySelectorAll('.periodBtn').forEach(btn => {
+        btn.disabled = btn.dataset.period === period;
+    });
+}
+
+// Only update progress stats (not streaks)
 async function updateStatsFromCache(period) {
     setActiveButton(period);
 
     document.getElementById('totalGrit').textContent = "Loading...";
-    document.getElementById('currentStreak').textContent = "Loading...";
-    document.getElementById('longestStreak').textContent = "Loading...";
+    document.getElementById('totalTrainings').textContent = "Loading...";
+    document.getElementById('totalDistance').textContent = "Loading...";
+    document.getElementById('totalTime').textContent = "Loading...";
 
-    const user = auth.currentUser;
-    if (!user) {
-        document.getElementById('progressStats').innerHTML = "Please log in.";
-        document.getElementById('currentStreak').textContent = "0";
-        document.getElementById('longestStreak').textContent = "0";
+    if (!allTrainings.length) {
         document.getElementById('totalGrit').textContent = "0";
+        document.getElementById('totalTrainings').textContent = "0";
+        document.getElementById('totalDistance').textContent = "0";
+        document.getElementById('totalTime').textContent = "0";
         return;
     }
-
-    // --- Calculate streaks for the selected period ---
-    const periodDates = allTrainings
-        .filter(t => {
-            const trainingDate = t.date ? new Date(t.date) : null;
-            return trainingDate && ((period === "allTime") || isWithinPeriod(trainingDate, period));
-        })
-        .map(t => t.date ? new Date(t.date) : null)
-        .filter(d => d);
-    const streaks = calculateStreaks(periodDates);
 
     // Calculate GRIT score for the selected period from trainings
     const periodStart = getPeriodStart(period);
@@ -241,23 +236,6 @@ async function updateStatsFromCache(period) {
         })
         .reduce((sum, t) => sum + (t.gritPoints || t.gritScore || t.grit || 0), 0);
 
-    document.getElementById('totalGrit').textContent = gritScore.toFixed(2);
-
-    // Optionally, you can still fetch and display streaks from Firestore as fallback
-    const gritDocRef = doc(db, "users", user.uid, "grit", period);
-    const gritDocSnap = await getDoc(gritDocRef);
-    if (gritDocSnap.exists()) {
-        const data = gritDocSnap.data();
-        document.getElementById('currentStreak').textContent =
-            typeof data.currentStreak === "number" ? data.currentStreak : streaks.current;
-        document.getElementById('longestStreak').textContent =
-            typeof data.longestStreak === "number" ? data.longestStreak : streaks.longest;
-    } else {
-        document.getElementById('currentStreak').textContent = streaks.current;
-        document.getElementById('longestStreak').textContent = streaks.longest;
-    }
-
-    // You can still show calculated values for trainings, distance, and time if you want:
     let totalTrainings = 0, totalDistance = 0, totalTime = 0;
     allTrainings.forEach(t => {
         const dateStr = t.date || t.createdAt;
@@ -291,11 +269,13 @@ async function updateStatsFromCache(period) {
             }
         }
     });
+
+    document.getElementById('totalGrit').textContent = gritScore.toFixed(2);
     document.getElementById('totalTrainings').textContent = totalTrainings;
     document.getElementById('totalDistance').textContent = totalDistance.toFixed(2);
     document.getElementById('totalTime').textContent = formatTime(totalTime);
 
-    // After you fetch allTrainings:
+    // Fatigue is always calculated on allTrainings
     const fatigue = calculateFatigue(allTrainings);
     displayFatigue(fatigue);
 }
@@ -311,10 +291,13 @@ document.querySelectorAll('.periodBtn').forEach(btn => {
 // Auth and data loading
 onAuthStateChanged(auth, async (user) => {
     if (!user) {
-        document.getElementById('progressStats').innerHTML = "Please log in.";
+        document.getElementById('progressStats').innerHTML = "Log in to see your stats.";
         document.getElementById('currentStreak').textContent = "0";
         document.getElementById('longestStreak').textContent = "0";
         document.getElementById('totalGrit').textContent = "0";
+        document.getElementById('totalTrainings').textContent = "0";
+        document.getElementById('totalDistance').textContent = "0";
+        document.getElementById('totalTime').textContent = "0";
         return;
     }
     const trainingsRef = collection(db, "users", user.uid, "trainings");
@@ -324,6 +307,17 @@ onAuthStateChanged(auth, async (user) => {
         allTrainings.push(doc.data());
     });
 
+    // Calculate streaks ONCE for all time
+    const periodDates = allTrainings
+        .filter(t => t.date)
+        .map(t => new Date(t.date))
+        .filter(d => d);
+    streaks = calculateStreaks(periodDates);
+
+    document.getElementById('currentStreak').textContent = streaks.current;
+    document.getElementById('longestStreak').textContent = streaks.longest;
+
+    // Show stats for the default period
     updateStatsFromCache(currentPeriod);
 });
 </script>

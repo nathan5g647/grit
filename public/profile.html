@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Profile | GRIT</title>
+    <link rel="stylesheet" href="style.css" />
+    <!-- Cropper.js CSS -->
+    <link  href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
+    <!-- Cropper.js JS -->
+    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+</head>
+<body>
+    <header>
+        <div class="grit-logo">
+            <img src="image/logo.jpg" alt="GRIT Logo" class="grit-logo-img">
+        </div>
+      <nav>
+            <a href="search.html">Search Users</a> |
+            <a href="index.html">Home</a> |
+            <a href="dashboard.html">Dashboard</a> |
+            <a href="leaderboard.html">Leaderboard</a> |
+            <a href="statistic.html">Statistic</a> |
+            <a href="profile.html">Profile</a> |
+            <a href="setting.html">Settings</a>
+        </nav>
+    </header>
+    <main style="max-width: 600px; margin: 0 auto;">
+        <section>
+            <h1>My Profile</h1>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+                <div id="profilePhoto" style="width: 110px; height: 110px; border-radius: 50%; background: #e0e6ed; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 2px solid #b0b8c1; margin-bottom: 6px;">
+                    <!-- User photo will be inserted here by JS, or a placeholder icon/letter -->
+                    <img id="userPhotoImg" src="image/user-placeholder.png" alt="Profile Photo" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                    <span id="userPhotoInitial" style="font-size: 2.5em; color: #7a8ca3;">?</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <!-- Badges will be inserted here by JS -->
+                    <div id="profileBadges" style="display: flex; align-items: center; gap: 4px;"></div>
+                    <div id="profileUsername" style="font-size: 1.3em; font-weight: 600; color: var(--grit-blue);">Loading...</div>
+                </div>
+                <!-- Only show this for the logged-in user -->
+                <div id="photoUploadSection" style="margin-top: 8px;">
+                    <input type="file" id="photoInput" accept="image/*" style="display:none;">
+                    <button id="changePhotoBtn" type="button">Change Photo</button>
+                </div>
+            </div>
+            <div id="profileStats">
+                <p><b>Current Streak:</b> <span id="currentStreak">Loading...</span></p>
+                
+            </div>
+        </section>
+        <section>
+            <h2>Last 3 Trainings</h2>
+            <div id="lastTrainings">
+                Loading...
+            </div>
+        </section>
+        <section>
+            <h2>Leaderboard Placement</h2>
+            <div id="leaderboardPlacement">
+                Loading...
+            </div>
+        </section>
+    </main>
+    <!-- Cropping Modal -->
+<div id="cropperModal" style="display:none; position:fixed; z-index:9999; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); align-items:center; justify-content:center;">
+    <div style="background:#fff; padding:20px; border-radius:8px; max-width:90vw; max-height:90vh; display:flex; flex-direction:column; align-items:center;">
+        <img id="cropperImage" style="max-width:300px; max-height:300px; display:block;">
+        <div style="margin-top:10px;">
+            <button id="cropperCancelBtn" type="button">Cancel</button>
+            <button id="cropperSaveBtn" type="button">Save</button>
+        </div>
+    </div>
+</div>
+    <script type="module" src="profile.js"></script>
+    <footer>
+        <div class="footer-content">
+            &copy; 2025 GRIT &mdash; Track your progress. Stay motivated.
+        </div>
+    </footer>
+</body>
+</html>

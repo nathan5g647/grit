@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Search Users</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <header>
+        <div class="grit-logo">
+            <img src="image/logo.jpg" alt="GRIT Logo" class="grit-logo-img">
+        </div>
+      <nav>
+            <a href="search.html">Search Users</a> |
+            <a href="index.html">Home</a> |
+            <a href="dashboard.html">Dashboard</a> |
+            <a href="leaderboard.html">Leaderboard</a> |
+            <a href="statistic.html">Statistic</a> |
+            <a href="profile.html">Profile</a> |
+            <a href="setting.html">Settings</a>
+        </nav>
+    </header>
+    <main style="max-width: 600px; margin: 0 auto;">
+        <h1>Search Users</h1>
+        <input type="text" id="searchBox" placeholder="Type a username..." autocomplete="off" style="width: 100%; padding: 10px; font-size: 1.1em;">
+        <div id="searchResults" style="margin-top: 20px;"></div>
+    </main>
+    <footer>
+        <div class="footer-content">
+            &copy; 2025 GRIT &mdash; Track your progress. Stay motivated.
+        </div>
+    </footer>
+    <script type="module" src="search.js"></script>
+</body>
+</html>
