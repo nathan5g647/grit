@@ -1,10 +1,18 @@
 import { db } from './script.js';
 import { collection, getDocs, setDoc, doc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
 
 const leaderboardDiv = document.getElementById('leaderboard');
 const usersBtn = document.getElementById('usersBtn');
 const citiesBtn = document.getElementById('citiesBtn');
 const countriesBtn = document.getElementById('countriesBtn');
+
+const ADMIN_UID = "FN8mLsCXjXPHdd7AYuK06JJNHiw1"; // <-- Replace with your admin UID
+
+function isAdmin() {
+    const auth = getAuth();
+    return auth.currentUser && auth.currentUser.uid === ADMIN_UID;
+}
 
 const PERIODS = [
     { key: "week", label: "Weekly" },
@@ -15,9 +23,8 @@ const PERIODS = [
 function getPeriodStart(period) {
     const now = new Date();
     if (period === 'week') {
-        // Set to most recent Monday
-        const day = now.getDay(); // 0 (Sun) - 6 (Sat)
-        const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is Sunday
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
         const monday = new Date(now);
         monday.setDate(diff);
         monday.setHours(0, 0, 0, 0);
@@ -33,7 +40,6 @@ function getPeriodStart(period) {
         jan1.setHours(0, 0, 0, 0);
         return jan1;
     }
-    // allTime: return a very old date
     return new Date(2000, 0, 1);
 }
 
@@ -49,28 +55,23 @@ async function fetchAllLeaderboardData() {
 
     for (const userDoc of usersSnap.docs) {
         const userId = userDoc.id;
-        // Get profile
         let profile = {};
         const settingsSnap = await getDocs(collection(db, "users", userId, "settings"));
         settingsSnap.forEach(doc => {
             if (doc.id === "profile") profile = doc.data();
         });
 
-        // Get all grit scores for this user
         const gritScores = {};
         const gritSnap = await getDocs(collection(db, "users", userId, "grit"));
         gritSnap.forEach(doc => {
             gritScores[doc.id] = doc.data().score || 0;
         });
 
-        // Get all trainings for this user
         const trainingsSnap = await getDocs(collection(db, "users", userId, "trainings"));
         const trainings = [];
         trainingsSnap.forEach(doc => {
             trainings.push({ id: doc.id, ...doc.data() });
         });
-        // After fetching trainings
-        console.log("User trainings for", userId, trainings);
 
         allUsers.push({
             userId,
@@ -302,15 +303,32 @@ async function saveLastWinner(period, users) {
 }
 
 // After fetching all users
-const users = await fetchAllLeaderboardData();
+async function adminSaveWinnersIfAdmin() {
+    const users = await fetchAllLeaderboardData();
+    if (isAdmin()) {
+        await saveLastWinner("week", users);
+        await saveLastWinner("month", users);
+        await saveLastWinner("year", users);
+        await saveLastWinner("allTime", users);
+    }
+}
 
-// Save winners for each period (this will overwrite the winner for each period)
-await saveLastWinner("week", users);
-await saveLastWinner("month", users);
-await saveLastWinner("year", users);
-await saveLastWinner("allTime", users);
+// DO NOT call adminSaveWinnersIfAdmin() automatically!
+// Only expose it for the admin user after authentication.
 
-// Then render the leaderboard
+const auth = getAuth();
+onAuthStateChanged(auth, (user) => {
+  if (user && user.uid === ADMIN_UID) {
+    window.adminSaveWinnersIfAdmin = adminSaveWinnersIfAdmin;
+  }
+});
+
+// For debugging UID
+window.showMyUid = () => {
+  import('https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js').then(({ getAuth }) => {
+    alert(getAuth().currentUser && getAuth().currentUser.uid);
+  });
+};
 
 
 

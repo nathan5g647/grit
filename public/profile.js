@@ -60,194 +60,212 @@ function sumGritForPeriod(trainings, period) {
         .reduce((sum, t) => sum + (t.gritPoints || t.gritScore || t.grit || 0), 0);
 }
 
-onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-        document.getElementById('profileStats').innerHTML = "<p>Please log in to view your profile.</p>";
-        document.getElementById('lastTrainings').textContent = "";
-        document.getElementById('leaderboardPlacement').textContent = "";
-        document.getElementById('profileUsername').textContent = "";
-        document.getElementById('userPhotoImg').style.display = "none";
-        document.getElementById('userPhotoInitial').textContent = "?";
-        document.getElementById('userPhotoInitial').style.display = "block";
-        return;
-    }
+// Helper to get UID from URL
+function getUidFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('uid');
+}
 
-    // Fetch username from root user document (same as leaderboard/settings)
+const paramsUid = getUidFromUrl();
+
+async function loadProfile(uid) {
+    // Fetch username and other info from users/{uid}/settings/profile
+    const profileDocRef = doc(db, "users", uid, "settings", "profile");
+    const profileDocSnap = await getDoc(profileDocRef);
     let username = "User";
-    try {
-        const userDocSnap = await getDoc(doc(db, "users", user.uid));
-        if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            if (typeof userData.username === "string" && userData.username.trim() !== "") {
-                username = userData.username.trim();
-            }
+    if (profileDocSnap.exists()) {
+        const profileData = profileDocSnap.data();
+        if (profileData.username && profileData.username.length > 0) {
+            // Capitalize first letter
+            username = profileData.username.charAt(0).toUpperCase() + profileData.username.slice(1);
         }
-    } catch (e) {
-        // Optionally handle error
     }
-    document.getElementById('profileUsername').textContent = username;
+    const usernameElem = document.getElementById('profileUsername');
+    if (usernameElem) usernameElem.textContent = username;
 
     // Profile photo or initial
     let photoURL = null;
     try {
-        const userDocSnap = await getDoc(doc(db, "users", user.uid));
+        const userDocSnap = await getDoc(doc(db, "users", uid));
         if (userDocSnap.exists()) {
             const userData = userDocSnap.data();
             if (userData && userData.photoURL) {
                 photoURL = userData.photoURL;
-            } else if (user.photoURL) {
-                photoURL = user.photoURL;
             }
         }
-    } catch (e) {
-        // Optionally handle error
+    } catch (e) {}
+
+    const userPhotoImg = document.getElementById('userPhotoImg');
+    const userPhotoInitial = document.getElementById('userPhotoInitial');
+    if (userPhotoImg && userPhotoInitial) {
+        if (photoURL) {
+            userPhotoImg.src = photoURL;
+            userPhotoImg.style.display = "block";
+            userPhotoInitial.style.display = "none";
+        } else {
+            userPhotoImg.style.display = "none";
+            const initial = (username && username.length > 0)
+                ? username.charAt(0).toUpperCase()
+                : "?";
+            userPhotoInitial.textContent = initial;
+            userPhotoInitial.style.display = "block";
+        }
     }
+}
 
-    if (photoURL) {
-        document.getElementById('userPhotoImg').src = photoURL;
-        document.getElementById('userPhotoImg').style.display = "block";
-        document.getElementById('userPhotoInitial').style.display = "none";
-    } else {
-        document.getElementById('userPhotoImg').style.display = "none";
-        document.getElementById('userPhotoInitial').textContent = username.charAt(0).toUpperCase();
-        document.getElementById('userPhotoInitial').style.display = "block";
+onAuthStateChanged(auth, async (user) => {
+    let uid = paramsUid || (user && user.uid);
+    if (!uid) {
+        document.getElementById('profileUsername').textContent = "User";
+        return;
     }
+    await loadProfile(uid);
 
-    // Fetch last 3 trainings
-    const trainingsRef = collection(db, "users", user.uid, "trainings");
-    const trainingsSnap = await getDocs(trainingsRef);
-    let trainings = [];
-    trainingsSnap.forEach(doc => {
-        trainings.push(doc.data());
-    });
-    trainings.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
-    const last3 = trainings.slice(0, 3);
+    // Fetch last 3 trainings (only for self)
+    if (user && uid === user.uid) {
+        const trainingsRef = collection(db, "users", user.uid, "trainings");
+        const trainingsSnap = await getDocs(trainingsRef);
+        let trainings = [];
+        trainingsSnap.forEach(doc => {
+            trainings.push(doc.data());
+        });
+        trainings.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+        const last3 = trainings.slice(0, 3);
 
-    let lastTrainingsHtml = "";
-    if (last3.length === 0) {
-        lastTrainingsHtml = "<p>No trainings found.</p>";
-    } else {
-        lastTrainingsHtml = "<table border='1' style='margin:0 auto;'><tr><th>Type</th><th>Duration</th><th>Distance (km)</th><th>GRIT</th></tr>";
-        last3.forEach(t => {
-            const type = t.type ? t.type.charAt(0).toUpperCase() + t.type.slice(1) : '-';
-            // --- Duration logic ---
-            let durationValue = "-";
-            if (t.duration) {
-                durationValue = t.duration;
-            } else if (typeof t.durationMinutes === "number" && t.durationMinutes > 0) {
-                durationValue = formatTime(t.durationMinutes);
-            } else if (t.intervals && Array.isArray(t.intervals)) {
-                let totalMinutes = 0;
-                t.intervals.forEach(i => {
-                    if (i.duration) {
-                        const parts = i.duration.split(":").map(Number);
-                        if (parts.length === 3) {
-                            totalMinutes += parts[0] * 60 + parts[1] + parts[2] / 60;
-                        } else if (parts.length === 2) {
-                            totalMinutes += parts[0] + parts[1] / 60;
-                        } else if (parts.length === 1) {
-                            totalMinutes += parts[0];
+        let lastTrainingsHtml = "";
+        if (last3.length === 0) {
+            lastTrainingsHtml = "<p>No trainings found.</p>";
+        } else {
+            lastTrainingsHtml = "<table border='1' style='margin:0 auto;'><tr><th>Type</th><th>Duration</th><th>Distance (km)</th><th>GRIT</th></tr>";
+            last3.forEach(t => {
+                const type = t.type ? t.type.charAt(0).toUpperCase() + t.type.slice(1) : '-';
+                // --- Duration logic ---
+                let durationValue = "-";
+                if (t.duration) {
+                    durationValue = t.duration;
+                } else if (typeof t.durationMinutes === "number" && t.durationMinutes > 0) {
+                    durationValue = formatTime(t.durationMinutes);
+                } else if (t.intervals && Array.isArray(t.intervals)) {
+                    let totalMinutes = 0;
+                    t.intervals.forEach(i => {
+                        if (i.duration) {
+                            const parts = i.duration.split(":").map(Number);
+                            if (parts.length === 3) {
+                                totalMinutes += parts[0] * 60 + parts[1] + parts[2] / 60;
+                            } else if (parts.length === 2) {
+                                totalMinutes += parts[0] + parts[1] / 60;
+                            } else if (parts.length === 1) {
+                                totalMinutes += parts[0];
+                            }
                         }
-                    }
-                });
-                if (totalMinutes > 0) durationValue = formatTime(totalMinutes);
-            }
-            // --- End duration logic ---
-            lastTrainingsHtml += `<tr>
-                <td>${type}</td>
-                <td>${durationValue}</td>
-                <td>${t.distance !== undefined ? t.distance : (t.intervals ? t.intervals.reduce((sum, i) => sum + (parseFloat(i.distance) || 0), 0).toFixed(2) : '-')}</td>
-                <td>${(t.gritPoints || t.gritScore || t.grit || 0).toFixed(2)}</td>
-            </tr>`;
-        });
-        lastTrainingsHtml += "</table>";
-    }
-    document.getElementById('lastTrainings').innerHTML = lastTrainingsHtml;
+                    });
+                    if (totalMinutes > 0) durationValue = formatTime(totalMinutes);
+                }
+                // --- End duration logic ---
+                lastTrainingsHtml += `<tr>
+                    <td>${type}</td>
+                    <td>${durationValue}</td>
+                    <td>${t.distance !== undefined ? t.distance : (t.intervals ? t.intervals.reduce((sum, i) => sum + (parseFloat(i.distance) || 0), 0).toFixed(2) : '-')}</td>
+                    <td>${(t.gritPoints || t.gritScore || t.grit || 0).toFixed(2)}</td>
+                </tr>`;
+            });
+            lastTrainingsHtml += "</table>";
+        }
+        document.getElementById('lastTrainings').innerHTML = lastTrainingsHtml;
 
-    // Streaks
-    const trainingDates = trainings.filter(t => t.date).map(t => new Date(t.date));
-    const streaks = calculateStreaks(trainingDates);
-    document.getElementById('currentStreak').textContent = streaks.current;
+        // Streaks
+        const trainingDates = trainings.filter(t => t.date).map(t => new Date(t.date));
+        const streaks = calculateStreaks(trainingDates);
+        document.getElementById('currentStreak').textContent = streaks.current;
 
-    // Leaderboard positions for each period
-    const usersRef = collection(db, "users");
-    const usersSnap = await getDocs(usersRef);
-    let leaderboardPositions = {
-        week: { rank: "-", total: "-" },
-        month: { rank: "-", total: "-" },
-        year: { rank: "-", total: "-" },
-        allTime: { rank: "-", total: "-" }
-    };
-
-    // For each user, fetch their trainings and calculate grit for each period
-    let allUsers = [];
-    for (const userDoc of usersSnap.docs) {
-        const userData = userDoc.data();
-        const uid = userDoc.id;
-        const userTrainingsRef = collection(db, "users", uid, "trainings");
-        const userTrainingsSnap = await getDocs(userTrainingsRef);
-        let userTrainings = [];
-        userTrainingsSnap.forEach(doc => userTrainings.push(doc.data()));
-        allUsers.push({
-            uid,
-            username: userData.username || "Unknown",
-            week: sumGritForPeriod(userTrainings, "week"),
-            month: sumGritForPeriod(userTrainings, "month"),
-            year: sumGritForPeriod(userTrainings, "year"),
-            allTime: sumGritForPeriod(userTrainings, "allTime")
-        });
-    }
-
-    // For each period, sort and find current user's rank
-    ["week", "month", "year", "allTime"].forEach(period => {
-        const sorted = allUsers.slice().sort((a, b) => b[period] - a[period]);
-        const total = sorted.length;
-        const myIndex = sorted.findIndex(u => u.uid === user.uid);
-        leaderboardPositions[period] = {
-            rank: myIndex >= 0 ? (sorted[myIndex][period] > 0 ? (myIndex + 1) : "-") : "-",
-            total
+        // Leaderboard positions for each period
+        const usersRef = collection(db, "users");
+        const usersSnap = await getDocs(usersRef);
+        let leaderboardPositions = {
+            week: { rank: "-", total: "-" },
+            month: { rank: "-", total: "-" },
+            year: { rank: "-", total: "-" },
+            allTime: { rank: "-", total: "-" }
         };
-    });
 
-    // Display leaderboard positions
-    let leaderboardHtml = `
-        <table border='1' style='margin:0 auto;'>
-            <tr>
-                <th>Period</th>
-                <th>Your Rank</th>
-                <th>Total Users</th>
-            </tr>
-            <tr>
-                <td>Weekly</td>
-                <td>${leaderboardPositions.week.rank}</td>
-                <td>${leaderboardPositions.week.total}</td>
-            </tr>
-            <tr>
-                <td>Monthly</td>
-                <td>${leaderboardPositions.month.rank}</td>
-                <td>${leaderboardPositions.month.total}</td>
-            </tr>
-            <tr>
-                <td>Yearly</td>
-                <td>${leaderboardPositions.year.rank}</td>
-                <td>${leaderboardPositions.year.total}</td>
-            </tr>
-            <tr>
-                <td>All Time</td>
-                <td>${leaderboardPositions.allTime.rank}</td>
-                <td>${leaderboardPositions.allTime.total}</td>
-            </tr>
-        </table>
-    `;
-    document.getElementById('leaderboardPlacement').innerHTML = leaderboardHtml;
-    document.getElementById('allTimeRank').textContent = leaderboardPositions.allTime.rank;
+        // For each user, fetch their trainings and calculate grit for each period
+        let allUsers = [];
+        for (const userDoc of usersSnap.docs) {
+            const userData = userDoc.data();
+            const uid = userDoc.id;
+            const userTrainingsRef = collection(db, "users", uid, "trainings");
+            const userTrainingsSnap = await getDocs(userTrainingsRef);
+            let userTrainings = [];
+            userTrainingsSnap.forEach(doc => userTrainings.push(doc.data()));
+            allUsers.push({
+                uid,
+                username: userData.username || "Unknown",
+                week: sumGritForPeriod(userTrainings, "week"),
+                month: sumGritForPeriod(userTrainings, "month"),
+                year: sumGritForPeriod(userTrainings, "year"),
+                allTime: sumGritForPeriod(userTrainings, "allTime")
+            });
+        }
+
+        // For each period, sort and find current user's rank
+        ["week", "month", "year", "allTime"].forEach(period => {
+            const sorted = allUsers.slice().sort((a, b) => b[period] - a[period]);
+            const total = sorted.length;
+            const myIndex = sorted.findIndex(u => u.uid === user.uid);
+            leaderboardPositions[period] = {
+                rank: myIndex >= 0 ? (sorted[myIndex][period] > 0 ? (myIndex + 1) : "-") : "-",
+                total
+            };
+        });
+
+        // Display leaderboard positions
+        let leaderboardHtml = `
+            <table border='1' style='margin:0 auto;'>
+                <tr>
+                    <th>Period</th>
+                    <th>Your Rank</th>
+                    <th>Total Users</th>
+                </tr>
+                <tr>
+                    <td>Weekly</td>
+                    <td>${leaderboardPositions.week.rank}</td>
+                    <td>${leaderboardPositions.week.total}</td>
+                </tr>
+                <tr>
+                    <td>Monthly</td>
+                    <td>${leaderboardPositions.month.rank}</td>
+                    <td>${leaderboardPositions.month.total}</td>
+                </tr>
+                <tr>
+                    <td>Yearly</td>
+                    <td>${leaderboardPositions.year.rank}</td>
+                    <td>${leaderboardPositions.year.total}</td>
+                </tr>
+                <tr>
+                    <td>All Time</td>
+                    <td>${leaderboardPositions.allTime.rank}</td>
+                    <td>${leaderboardPositions.allTime.total}</td>
+                </tr>
+            </table>
+        `;
+        document.getElementById('leaderboardPlacement').innerHTML = leaderboardHtml;
+        const allTimeRankElem = document.getElementById('allTimeRank');
+        if (allTimeRankElem) {
+            allTimeRankElem.textContent = leaderboardPositions.allTime.rank;
+        }
+    }
 
     // Show the upload section only for the logged-in user
     const photoUploadSection = document.getElementById('photoUploadSection');
     if (photoUploadSection) {
-        photoUploadSection.style.display = "block";
+        if (user && (!paramsUid || paramsUid === user.uid)) {
+            photoUploadSection.style.display = "block";
+        } else {
+            photoUploadSection.style.display = "none";
+        }
     }
 
+    // Display badges
     async function displayBadges(userId) {
         const badgeDiv = document.getElementById('profileBadges');
         badgeDiv.innerHTML = ""; // Clear previous badges
@@ -256,7 +274,6 @@ onAuthStateChanged(auth, async (user) => {
         for (const period of periods) {
             const winnerDoc = await getDoc(doc(db, "winners", period));
             if (winnerDoc.exists() && winnerDoc.data().userId === userId) {
-                // Use your badge images: image/badge-week.png, image/badge-month.png, image/badge-year.png
                 const img = document.createElement("img");
                 img.src = `image/badge-${period}.png`;
                 img.alt = `${period} winner badge`;
@@ -267,11 +284,10 @@ onAuthStateChanged(auth, async (user) => {
             }
         }
     }
-
-    // After you know the current user's UID (e.g. after onAuthStateChanged and username logic)
-    displayBadges(user.uid);
+    displayBadges(uid);
 });
 
+// --- Photo upload/cropper logic ---
 document.addEventListener('DOMContentLoaded', () => {
     const photoInput = document.getElementById('photoInput');
     const changePhotoBtn = document.getElementById('changePhotoBtn');
@@ -344,51 +360,5 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 'image/jpeg', 0.95);
         });
     }
-
-    // Profile UID handling
-    const params = new URLSearchParams(window.location.search);
-    const uid = params.get('uid');
-
-    if (uid) {
-        // Load the profile for the given UID
-        getDoc(doc(db, "users", uid)).then(userDoc => {
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                // Fill in the profile page with userData (username, photo, badges, etc.)
-                document.getElementById('profileUsername').textContent = userData.username;
-                if (userData.photoURL) {
-                    userPhotoImg.src = userData.photoURL;
-                    userPhotoImg.style.display = "block";
-                    userPhotoInitial.style.display = "none";
-                } else {
-                    userPhotoImg.style.display = "none";
-                    userPhotoInitial.textContent = userData.username.charAt(0).toUpperCase();
-                    userPhotoInitial.style.display = "block";
-                }
-                // TODO: Load and display badges
-            } else {
-                document.getElementById('profileUsername').textContent = "User not found";
-            }
-        });
-    } else {
-        // Fallback: show logged-in user's profile as before
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                const userDocSnap = await getDoc(doc(db, "users", user.uid));
-                if (userDocSnap.exists()) {
-                    const userData = userDocSnap.data();
-                    document.getElementById('profileUsername').textContent = userData.username;
-                    if (userData.photoURL) {
-                        userPhotoImg.src = userData.photoURL;
-                        userPhotoImg.style.display = "block";
-                        userPhotoInitial.style.display = "none";
-                    } else {
-                        userPhotoImg.style.display = "none";
-                        userPhotoInitial.textContent = userData.username.charAt(0).toUpperCase();
-                        userPhotoInitial.style.display = "block";
-                    }
-                }
-            }
-        });
-    }
 });
+

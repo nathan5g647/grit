@@ -1,6 +1,7 @@
 {
   "projects": {
-    "grit": "grit-802e6"
+    "grit": "grit-802e6",
+    "default": "grit-802e6"
   },
   "targets": {},
   "etags": {}
