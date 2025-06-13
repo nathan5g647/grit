@@ -36,10 +36,10 @@
      style="width: 100%; height: 100%; object-fit: cover; display: none;">
                     <span id="userPhotoInitial" style="font-size: 2.5em; color: #7a8ca3;">?</span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <!-- Badges will be inserted here by JS -->
-                    <div id="profileBadges" style="display: flex; align-items: center; gap: 4px;"></div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
                     <div id="profileUsername" style="font-size: 1.3em; font-weight: 600; color: var(--grit-blue);">Loading...</div>
+                    <!-- Badges will be inserted here by JS -->
+                    <div id="profileBadges" style="display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 2em;"></div>
                 </div>
                 <!-- Only show this for the logged-in user -->
                 <div id="photoUploadSection" style="margin-top: 8px; display: none;">

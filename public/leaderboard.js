@@ -93,6 +93,7 @@ async function fetchAllLeaderboardData() {
 function getTopUsers(users, period) {
     return users
         .map(u => ({
+            userId: u.userId, // <-- Add this line!
             username: u.username,
             city: u.city,
             country: u.country,

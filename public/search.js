@@ -1,39 +1,47 @@
 import { db } from './script.js';
-import { collection, query, orderBy, startAt, endAt, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 
 const searchBox = document.getElementById('searchBox');
 const searchResults = document.getElementById('searchResults');
 
 searchBox.addEventListener('input', async () => {
-    const searchTerm = searchBox.value.trim().toLowerCase();
+    const searchTerm = searchBox.value.trim();
     if (searchTerm.length === 0) {
         searchResults.innerHTML = "";
         return;
     }
 
-    // Firestore query: usernames are stored in lowercase for best results
     const usersRef = collection(db, "users");
-    const q = query(
-        usersRef,
-        orderBy("username"),
-        startAt(searchTerm),
-        endAt(searchTerm + '\uf8ff'),
-        limit(10)
-    );
-    const snap = await getDocs(q);
+    const usersSnap = await getDocs(usersRef);
 
-    if (snap.empty) {
+    let foundUsers = [];
+    for (const userDoc of usersSnap.docs) {
+        const profileDocRef = doc(db, "users", userDoc.id, "settings", "profile");
+        const profileDocSnap = await getDoc(profileDocRef);
+        if (profileDocSnap.exists()) {
+            const profileData = profileDocSnap.data();
+            if (
+                profileData.username &&
+                profileData.username.startsWith(searchTerm) // case-sensitive prefix search
+            ) {
+                foundUsers.push({
+                    uid: userDoc.id,
+                    username: profileData.username
+                });
+            }
+        }
+    }
+
+    if (foundUsers.length === 0) {
         searchResults.innerHTML = "<p>No users found.</p>";
         return;
     }
 
     let html = "<ul style='list-style:none;padding:0;'>";
-    snap.forEach(doc => {
-        const data = doc.data();
-        // Link to profile page, assuming you use profile.html?uid=USER_ID
+    foundUsers.forEach(user => {
         html += `<li style="padding:8px 0;border-bottom:1px solid #eee;">
-            <a href="profile.html?uid=${doc.id}" style="text-decoration:none;color:inherit;font-weight:bold;">
-                ${data.username}
+            <a href="profile.html?uid=${user.uid}" style="text-decoration:none;color:inherit;font-weight:bold;">
+                ${user.username}
             </a>
         </li>`;
     });
