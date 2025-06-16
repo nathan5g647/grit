@@ -93,6 +93,7 @@ async function fetchAllLeaderboardData() {
 function getTopUsers(users, period) {
     return users
         .map(u => ({
+
             userId: u.userId, // <-- Add this line!
             username: u.username,
             city: u.city,
@@ -236,15 +237,29 @@ function sumGritForPeriod(trainings, period) {
         return trainings.reduce((sum, t) => sum + (t.gritPoints || t.gritScore || t.grit || 0), 0);
     }
     const periodStart = getPeriodStart(period);
+    trainings.forEach(t => {
+        const dateStr = t.date || t.createdAt;
+        const d = parseLocalDate(dateStr);
+        if (period === "week") {
+            console.log("Training date:", d, "Period start:", periodStart, "In week?", d >= periodStart);
+        }
+    });
     return trainings
         .filter(t => {
-            // Prefer t.date, fallback to t.createdAt
             const dateStr = t.date || t.createdAt;
             if (!dateStr) return false;
-            const d = new Date(dateStr);
+            const d = parseLocalDate(dateStr);
             return d >= periodStart;
         })
         .reduce((sum, t) => sum + (t.gritPoints || t.gritScore || t.grit || 0), 0);
+}
+
+function parseLocalDate(dateStr) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+    return new Date(dateStr);
 }
 
 async function showCategory(category) {
