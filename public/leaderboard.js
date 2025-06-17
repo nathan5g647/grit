@@ -233,15 +233,12 @@ function renderCountriesTable(countries, periodLabel, allUsers, currentUsername)
 }
 
 function sumGritForPeriod(trainings, period) {
-    if (period === "allTime") {
-        return trainings.reduce((sum, t) => sum + (t.gritPoints || t.gritScore || t.grit || 0), 0);
-    }
     const periodStart = getPeriodStart(period);
     trainings.forEach(t => {
         const dateStr = t.date || t.createdAt;
         const d = parseLocalDate(dateStr);
         if (period === "week") {
-            console.log("Training date:", d, "Period start:", periodStart, "In week?", d >= periodStart);
+            console.log("Training date:", d, "Period start:", periodStart, "In week?", d >= periodStart, "Grit:", t.gritScore);
         }
     });
     return trainings

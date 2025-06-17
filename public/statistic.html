@@ -64,6 +64,15 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/fi
 let allTrainings = []; // cache all trainings for the session
 let streaks = { current: 0, longest: 0 };
 
+function parseLocalDate(dateStr) {
+    // If format is YYYY-MM-DD, treat as local midnight
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+    return new Date(dateStr);
+}
+
 function getPeriodStart(period) {
     const now = new Date();
     if (period === 'week') {
@@ -95,7 +104,7 @@ function formatTime(minutes) {
 }
 
 function isWithinPeriod(date, period) {
-    const d = new Date(date);
+    const d = parseLocalDate(date);
     const periodStart = getPeriodStart(period);
     return d >= periodStart;
 }
@@ -105,7 +114,7 @@ function calculateStreaks(trainingDates) {
 
     // Sort all training dates ascending by timestamp
     const sortedDates = trainingDates
-        .map(d => new Date(d))
+        .map(d => parseLocalDate(d))
         .filter(d => !isNaN(d))
         .sort((a, b) => a - b);
 
@@ -231,7 +240,7 @@ async function updateStatsFromCache(period) {
         .filter(t => {
             const dateStr = t.date || t.createdAt;
             if (!dateStr) return false;
-            const d = new Date(dateStr);
+            const d = parseLocalDate(dateStr);
             return (period === "allTime") || (d >= periodStart);
         })
         .reduce((sum, t) => sum + (t.gritPoints || t.gritScore || t.grit || 0), 0);
@@ -239,7 +248,7 @@ async function updateStatsFromCache(period) {
     let totalTrainings = 0, totalDistance = 0, totalTime = 0;
     allTrainings.forEach(t => {
         const dateStr = t.date || t.createdAt;
-        const trainingDate = dateStr ? new Date(dateStr) : null;
+        const trainingDate = dateStr ? parseLocalDate(dateStr) : null;
         if (
             (period === "allTime") ||
             (trainingDate && isWithinPeriod(trainingDate, period))
@@ -310,7 +319,7 @@ onAuthStateChanged(auth, async (user) => {
     // Calculate streaks ONCE for all time
     const periodDates = allTrainings
         .filter(t => t.date)
-        .map(t => new Date(t.date))
+        .map(t => parseLocalDate(t.date))
         .filter(d => d);
     streaks = calculateStreaks(periodDates);
 
