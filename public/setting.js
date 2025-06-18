@@ -1,150 +1,199 @@
+import { doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 import { auth, db } from './script.js';
-import { doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
 
-window.addEventListener('DOMContentLoaded', () => {
-    const form = document.getElementById('settingsForm');
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (!form) {
-        console.error('settingsForm not found in DOM!');
+const form = document.getElementById('settingsForm');
+const logoutBtn = document.getElementById('logoutBtn');
+const originalFormHTML = form.innerHTML;
+
+// Fill form fields from Firestore data
+function fillForm(data) {
+    if (document.getElementById('username')) document.getElementById('username').value = data.username || '';
+    if (document.getElementById('sex')) document.getElementById('sex').value = data.sex || '';
+    if (document.getElementById('dob')) document.getElementById('dob').value = data.dob || '';
+    if (document.getElementById('city')) document.getElementById('city').value = data.city || '';
+    if (document.getElementById('height')) document.getElementById('height').value = data.height || '';
+    if (document.getElementById('weight')) document.getElementById('weight').value = data.weight || '';
+    if (document.getElementById('maxHr')) document.getElementById('maxHr').value = data.maxHr || '';
+    if (document.getElementById('restHr')) document.getElementById('restHr').value = data.restHr || '';
+    const usernameInput = document.getElementById('username');
+    if (usernameInput) usernameInput.readOnly = true;
+}
+
+// Show summary view
+function displaySettingsAsText(data) {
+    form.innerHTML = `
+        <label>Username:</label> <span>${data.username || '<span style="color:#888;">(not set)</span>'}</span><br>
+        <label>Sex:</label> <span>${data.sex || ''}</span><br>
+        <label>Date of Birth:</label> <span>${data.dob || ''}</span><br>
+        <label>City:</label> <span>${data.city || ''}</span><br>
+        <label>Height (cm):</label> <span>${data.height || ''}</span><br>
+        <label>Weight (kg):</label> <span>${data.weight || ''}</span><br>
+        <label>Max HR:</label> <span>${data.maxHr || ''}</span><br>
+        <label>Rest HR:</label> <span>${data.restHr || ''}</span><br>
+        <div id="stravaStatus" style="text-align:center; margin: 24px 0 12px 0;"></div>
+        <div id="stravaConnectContainer" style="text-align:center; margin-bottom: 24px;"></div>
+        <button id="editSettings" type="button">Edit Settings</button>
+    `;
+    updateStravaStatus();
+    const editBtn = document.getElementById('editSettings');
+    if (editBtn) {
+        editBtn.onclick = function() {
+            form.innerHTML = originalFormHTML;
+            fillForm(data); // always fill with all data, including username
+            updateStravaStatus();
+        };
+    }
+}
+
+// Save settings (never save username, never delete other fields)
+form.onsubmit = async (e) => {
+    e.preventDefault();
+    const user = auth.currentUser;
+    if (!user) return;
+
+    // Fetch the current settings to merge
+    const docRef = doc(db, "users", user.uid, "settings", "profile");
+    const docSnap = await getDoc(docRef);
+    let currentData = {};
+    if (docSnap.exists()) {
+        currentData = docSnap.data();
+    }
+
+    // Only update editable fields
+    const updatedData = {
+        sex: document.getElementById('sex')?.value || '',
+        dob: document.getElementById('dob')?.value || '',
+        city: document.getElementById('city')?.value || '',
+        height: document.getElementById('height')?.value || '',
+        weight: document.getElementById('weight')?.value || '',
+        maxHr: document.getElementById('maxHr')?.value || '',
+        restHr: document.getElementById('restHr')?.value || ''
+    };
+
+    // Merge with existing data, but never overwrite username or other fields
+    const mergedData = { ...currentData, ...updatedData };
+
+    await setDoc(docRef, mergedData, { merge: true });
+    displaySettingsAsText(mergedData);
+};
+
+// Show/hide logout button
+onAuthStateChanged(auth, async (user) => {
+    if (logoutBtn) logoutBtn.style.display = user ? 'inline-block' : 'none';
+    if (!user) return;
+
+    // Only handle Strava connection if ?code=... is present
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+
+    // Handle Strava OAuth code ONLY
+    if (code) {
+        fetch('https://us-central1-grit-802e6.cloudfunctions.net/stravaTokenExchange?code=' + code)
+            .then(res => res.json())
+            .then(async data => {
+                if (data.access_token) {
+                    // ONLY update the strava/connection doc!
+                    await setDoc(doc(db, "users", user.uid, "strava", "connection"), {
+                        connected: true,
+                        accessToken: data.access_token,
+                        connectedAt: new Date().toISOString()
+                    });
+                    window.location.href = window.location.pathname; // Clean up URL
+                } else {
+                    alert('Failed to connect to Strava: ' + JSON.stringify(data));
+                }
+            })
+            .catch(err => {
+                alert('Failed to connect to Strava (network): ' + err);
+            });
+        return; // STOP: Do not render or save settings here!
+    }
+
+    // Normal settings rendering (only if not handling Strava code)
+    const docRef = doc(db, "users", user.uid, "settings", "profile");
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        const data = docSnap.data();
+        displaySettingsAsText(data);
+    } else {
+        fillForm({});
+        updateStravaStatus();
+    }
+});
+
+// Logout logic
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', function() {
+        auth.signOut().then(function() {
+            window.location.href = "index.html";
+        });
+    });
+}
+
+// Strava status and connect button
+async function updateStravaStatus() {
+    const statusDiv = document.getElementById('stravaStatus');
+    const btnContainer = document.getElementById('stravaConnectContainer');
+    if (!statusDiv) return;
+
+    // Clear button container
+    if (btnContainer) btnContainer.innerHTML = '';
+
+    const user = auth.currentUser;
+    if (!user) {
+        statusDiv.textContent = "Strava not connected";
+        statusDiv.style.color = "#888";
         return;
     }
-    const originalFormHTML = form.innerHTML; // Save the original form HTML
 
-    // Helper to fill form with data
-    function fillForm(data) {
-        const sex = document.getElementById('sex');
-        const dob = document.getElementById('dob');
-        const city = document.getElementById('city');
-        const height = document.getElementById('height');
-        const weight = document.getElementById('weight');
-        const maxHr = document.getElementById('maxHr');
-        const restHr = document.getElementById('restHr');
-        const username = document.getElementById('username');
-        if (sex) sex.value = data.sex || '';
-        if (dob) dob.value = data.dob || '';
-        if (city) city.value = data.city || '';
-        if (height) height.value = data.height || '';
-        if (weight) weight.value = data.weight || '';
-        if (maxHr) maxHr.value = data.maxHr || '';
-        if (restHr) restHr.value = data.restHr || '';
-        if (username) username.value = data.username || '';
-    }
-
-    function removeButtons() {
-        form.querySelectorAll("button").forEach(btn => btn.remove());
-    }
-
-    function displaySettingsAsText(data) {
-        form.innerHTML = `
-            <label>Username:</label> <span>${data.username || ''}</span><br>
-            <label>Sex:</label> <span>${data.sex || ''}</span><br>
-            <label>Date of Birth:</label> <span>${data.dob || ''}</span><br>
-            <label>City:</label> <span>${data.city || ''}</span><br>
-            <label>Height (cm):</label> <span>${data.height || ''}</span><br>
-            <label>Weight (kg):</label> <span>${data.weight || ''}</span><br>
-            <label>Max HR:</label> <span>${data.maxHr || ''}</span><br>
-            <label>Rest HR:</label> <span>${data.restHr || ''}</span><br>
-        `;
-        addEditButton(data);
-    }
-
-    function addEditButton(data) {
-        const editBtn = document.createElement('button');
-        editBtn.type = "button";
-        editBtn.id = "editSettings";
-        editBtn.textContent = "Edit Settings";
-        form.appendChild(editBtn);
-        editBtn.addEventListener('click', () => {
-            form.innerHTML = originalFormHTML;
-            fillForm(data);
-            removeButtons();
-            addSaveButton();
-            // Add username field as readonly
-            const usernameInput = document.getElementById('username');
-            if (usernameInput) {
-                usernameInput.readOnly = true;
-            }
-        });
-    }
-
-    function addSaveButton() {
-        const saveBtn = document.createElement('button');
-        saveBtn.type = "submit";
-        saveBtn.id = "saveSettings";
-        saveBtn.textContent = "Save Settings";
-        form.appendChild(saveBtn);
-    }
-
-    function normalizeName(str) {
-        return str
-            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
-            .trim()
-            .toLowerCase()
-            .replace(/\b\w/g, c => c.toUpperCase()); // Capitalize each word
-    }
-
-    onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            const docRef = doc(db, "users", user.uid, "settings", "profile");
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                displaySettingsAsText(data);
-            } else {
-                removeButtons();
-                addSaveButton();
-            }
-        } else {
-            removeButtons();
+    const stravaDocRef = doc(db, "users", user.uid, "strava", "connection");
+    const stravaDoc = await getDoc(stravaDocRef);
+    if (stravaDoc.exists() && stravaDoc.data().connected) {
+        statusDiv.textContent = "Strava connected";
+        statusDiv.style.color = "#fc4c02";
+        // Show disconnect button below status
+        if (btnContainer) {
+            const disconnectBtn = document.createElement('button');
+            disconnectBtn.textContent = 'Disconnect from Strava';
+            disconnectBtn.style.background = '#fc4c02';
+            disconnectBtn.style.color = 'white';
+            disconnectBtn.style.padding = '10px 20px';
+            disconnectBtn.style.border = 'none';
+            disconnectBtn.style.borderRadius = '5px';
+            disconnectBtn.style.cursor = 'pointer';
+            disconnectBtn.style.fontWeight = 'bold';
+            disconnectBtn.style.fontSize = '1em';
+            disconnectBtn.style.marginTop = '10px';
+            disconnectBtn.onclick = async function() {
+                await deleteDoc(stravaDocRef);
+                updateStravaStatus();
+            };
+            btnContainer.appendChild(disconnectBtn);
         }
-    });
-
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const user = auth.currentUser;
-        if (!user) return;
-        const data = {
-            username: document.getElementById('username')?.value || '', // <-- Ensure username is saved
-            sex: document.getElementById('sex')?.value || '',
-            dob: document.getElementById('dob')?.value || '',
-            city: normalizeName(document.getElementById('city').value),
-            height: document.getElementById('height') ? document.getElementById('height').value : '',
-            weight: document.getElementById('weight') ? document.getElementById('weight').value : '',
-            maxHr: document.getElementById('maxHr') ? document.getElementById('maxHr').value : '',
-            restHr: document.getElementById('restHr') ? document.getElementById('restHr').value : ''
-        };
-        try {
-            await setDoc(doc(db, "users", user.uid, "settings", "profile"), data, { merge: true });
-            // Also save username at the root user document for global display
-            if (data.username) {
-                await setDoc(doc(db, "users", user.uid), { username: data.username }, { merge: true });
-            }
-            displaySettingsAsText(data);
-        } catch (error) {
-            // Optionally handle error
+    } else {
+        statusDiv.textContent = "Strava not connected";
+        statusDiv.style.color = "#888";
+        // Show connect button if not connected
+        if (btnContainer) {
+            const connectBtn = document.createElement('button');
+            connectBtn.textContent = 'Connect to Strava';
+            connectBtn.style.background = '#fc4c02';
+            connectBtn.style.color = 'white';
+            connectBtn.style.padding = '10px 20px';
+            connectBtn.style.border = 'none';
+            connectBtn.style.borderRadius = '5px';
+            connectBtn.style.cursor = 'pointer';
+            connectBtn.style.fontWeight = 'bold';
+            connectBtn.style.fontSize = '1em';
+            connectBtn.onclick = function() {
+                const clientId = '164917';
+                const redirectUri = 'https://grit-802e6.web.app/setting.html'; // or your deployed URL
+                const scope = 'read,activity:read';
+                const stravaAuthUrl = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&approval_prompt=auto&scope=${scope}`;
+                window.location.href = stravaAuthUrl;
+            };
+            btnContainer.appendChild(connectBtn);
         }
-    });
-
-    auth.onAuthStateChanged(function(user) {
-        if (logoutBtn) {
-            logoutBtn.style.display = user ? 'inline-block' : 'none';
-        }
-    });
-
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', function() {
-            auth.signOut().then(function() {
-                window.location.href = "index.html";
-            });
-        });
     }
-
-    // When rendering the form for editing, add the username field (readonly)
-    form.innerHTML = form.innerHTML.replace(
-        '<label for="sex">Sex:</label>',
-        `<label for="username">Username:</label>
-        <input type="text" id="username" name="username" readonly /><br>
-        <label for="sex">Sex:</label>`
-    );
-});
+}

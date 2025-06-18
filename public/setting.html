@@ -22,6 +22,9 @@
     </header>
     <h1>User Settings</h1>
     <form id="settingsForm">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" readonly /><br>
+
         <label for="sex">Sex:</label>
         <select id="sex" name="sex">
             <option value="">Select</option>
@@ -54,12 +57,18 @@
         <input type="number" id="restHr" name="restHr">
         <br />
 
+         <div id="stravaStatus" style="text-align:center; margin-top:32px;"></div>
+            <div id="stravaConnectContainer" style="text-align:center; margin-top:16px;"></div>
+
         <button type="submit" id="saveSettings">Save Settings</button>
            
     </form>
      
     <div id="settingsMessage"></div>
     <button id="logoutBtn" style="display:none;">Log Out from Account</button>
+   
+   
+    
     <script type="module" src="setting.js"></script>
 </body>
 <footer>
