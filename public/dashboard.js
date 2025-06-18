@@ -1,5 +1,394 @@
 import { auth, db } from './script.js';
-import { doc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, setDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+import { doc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, setDoc, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
+let selectedTrainingIndex = null;
+let trainingsCache = [];
+let currentPage = 0;
+const trainingsPerPage = 10;
+
+// --- GLOBAL FUNCTIONS ---
+
+async function fetchAllTrainings() {
+    const user = auth.currentUser;
+    if (!user) return [];
+    const trainingsRef = collection(db, "users", user.uid, "trainings");
+    const q = query(trainingsRef, orderBy("createdAt", "desc"));
+    const querySnapshot = await getDocs(q);
+    const trainings = [];
+    querySnapshot.forEach(docSnap => {
+        const t = docSnap.data();
+        trainings.push(t);
+    });
+    return trainings;
+}
+
+function renderTrainingsPage(trainings, page) {
+    let html = "<h3>Last Trainings</h3>";
+    if (trainings.length === 0) {
+        html += "<p>No trainings found.</p>";
+    } else {
+        html += "<ul>";
+        const start = page * trainingsPerPage;
+        const end = Math.min(start + trainingsPerPage, trainings.length);
+        for (let i = start; i < end; i++) {
+            const t = trainings[i];
+            html += `<li class="training-item" data-index="${i}" style="cursor:pointer;">
+                <strong>${t.title || 'No title'}</strong> (${t.date || 'No date'})<br>
+                Type: ${t.type || ''}<br>
+                Intervals: ${t.intervals ? t.intervals.length : 0}
+            </li>`;
+        }
+        html += "</ul>";
+        // Navigation arrows
+        html += `<div style="margin-top:10px;">`;
+        html += `<button id="prevTrainings" ${page === 0 ? "disabled" : ""}>&larr; Prev</button>`;
+        html += `<span style="margin:0 10px;">Page ${page + 1} of ${Math.ceil(trainings.length / trainingsPerPage)}</span>`;
+        html += `<button id="nextTrainings" ${end >= trainings.length ? "disabled" : ""}>Next &rarr;</button>`;
+        html += `</div>`;
+    }
+    // Add a container for training details
+    html += `<div id="trainingDetails"></div>`;
+    return html;
+}
+
+async function displayLastTrainings() {
+    const lastTrainingsDiv = document.getElementById('lastTrainings');
+    if (!lastTrainingsDiv) return;
+    const user = auth.currentUser;
+    if (!user) {
+        lastTrainingsDiv.innerHTML = "<h3>Last Trainings</h3><p>Please log in to see your last trainings.</p>";
+        return;
+    }
+    // Fetch and cache all trainings only once per session
+    if (trainingsCache.length === 0) {
+        trainingsCache = await fetchAllTrainings();
+    }
+    lastTrainingsDiv.innerHTML = renderTrainingsPage(trainingsCache, currentPage);
+
+    // Add event listeners for navigation
+    addTrainingsNavListeners();
+
+    // Add click listeners for training items
+    document.querySelectorAll('.training-item').forEach(item => {
+        item.addEventListener('click', function () {
+            const idx = parseInt(this.getAttribute('data-index'));
+            selectedTrainingIndex = idx; // Track selected training
+            showTrainingDetails(trainingsCache[idx]);
+        });
+    });
+
+    // If a training is selected, show its details after page change
+    if (
+        selectedTrainingIndex !== null &&
+        selectedTrainingIndex >= currentPage * trainingsPerPage &&
+        selectedTrainingIndex < Math.min((currentPage + 1) * trainingsPerPage, trainingsCache.length)
+    ) {
+        showTrainingDetails(trainingsCache[selectedTrainingIndex]);
+    } else {
+        // Clear details if selected training is not on this page
+        document.getElementById('trainingDetails').innerHTML = '';
+    }
+}
+
+function showTrainingDetails(training) {
+    const detailsDiv = document.getElementById('trainingDetails');
+    if (!detailsDiv || !training) return;
+    let html = `
+        <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 10px; position: relative;">
+            <h4 style="margin: 0; flex: 1; text-align: center;">Training Details</h4>
+            <button id="closeTrainingDetails" 
+                style="
+                    background:#BF1A2F;
+                    color:white;
+                    border:none;
+                    border-radius:4px;
+                    padding:6px 16px;
+                    cursor:pointer;
+                    font-weight:bold;
+                    font-size:1em;
+                    margin-right: 20px;
+                    position: absolute;
+                    right: 0;
+                    top: 50%;
+                    transform: translateY(-50%);
+                ">
+                Close
+            </button>
+        </div>
+    `;
+    html += `<div style="text-align:center;">`;
+    html += `<strong>Title:</strong> ${training.title || ''}<br>`;
+    html += `<strong>Date:</strong> ${training.date || ''}<br>`;
+    html += `<strong>Type:</strong> ${training.type || ''}<br>`;
+    html += `<strong>Total Duration:</strong> ${training.durationMinutes ? training.durationMinutes.toFixed(2) + ' min' : 'N/A'}<br>`;
+    html += `<strong>Total Distance:</strong> ${training.distance ? training.distance.toFixed(2) + ' km' : 'N/A'}<br>`;
+    html += `<strong>Total Climb:</strong> ${training.totalClimb ? training.totalClimb + ' m' : 'N/A'}<br>`;
+    html += `<strong>Avg Heartrate:</strong> ${training.hrAvg ? training.hrAvg + ' bpm' : 'N/A'}<br>`;
+    html += `<strong>Total TRIMP:</strong> ${typeof training.trimp === 'number' ? training.trimp.toFixed(2) : 'N/A'}<br>`;
+    html += `<strong>GRIT Score:</strong> ${typeof training.gritScore === 'number' ? training.gritScore.toFixed(2) : (training.gritScore || 'N/A')}<br>`;
+    if (training.laps && training.laps.length > 0) {
+        html += `<strong>Laps:</strong><ul style="display:inline-block; text-align:left;">`;
+        training.laps.forEach((lap, i) => {
+            html += `<li>
+                <strong>Lap ${i + 1}:</strong>
+                Duration: ${lap.moving_time ? (lap.moving_time / 60).toFixed(2) + ' min' : 'N/A'}, 
+                Distance: ${lap.distance ? (lap.distance / 1000).toFixed(2) + ' km' : 'N/A'}, 
+                HR Avg: ${lap.average_heartrate || 'N/A'}
+            </li>`;
+        });
+        html += `</ul>`;
+    }
+    html += `</div>`;
+    detailsDiv.innerHTML = html;
+
+    // Add close button logic
+    const closeBtn = document.getElementById('closeTrainingDetails');
+    if (closeBtn) {
+        closeBtn.onclick = function() {
+            detailsDiv.innerHTML = '';
+            selectedTrainingIndex = null;
+        };
+    }
+}
+
+// Helper to re-add listeners after re-render
+function addTrainingsNavListeners() {
+    const prevBtn = document.getElementById('prevTrainings');
+    const nextBtn = document.getElementById('nextTrainings');
+    const lastTrainingsDiv = document.getElementById('lastTrainings');
+    if (prevBtn) {
+        prevBtn.onclick = () => {
+            if (currentPage > 0) {
+                currentPage--;
+                lastTrainingsDiv.innerHTML = renderTrainingsPage(trainingsCache, currentPage);
+                addTrainingsNavListeners();
+                // Restore details if selected training is on this page
+                if (
+                    selectedTrainingIndex !== null &&
+                    selectedTrainingIndex >= currentPage * trainingsPerPage &&
+                    selectedTrainingIndex < Math.min((currentPage + 1) * trainingsPerPage, trainingsCache.length)
+                ) {
+                    showTrainingDetails(trainingsCache[selectedTrainingIndex]);
+                } else {
+                    document.getElementById('trainingDetails').innerHTML = '';
+                }
+                // Re-add click listeners for training items
+                document.querySelectorAll('.training-item').forEach(item => {
+                    item.addEventListener('click', function () {
+                        const idx = parseInt(this.getAttribute('data-index'));
+                        selectedTrainingIndex = idx;
+                        showTrainingDetails(trainingsCache[idx]);
+                    });
+                });
+            }
+        };
+    }
+    if (nextBtn) {
+        nextBtn.onclick = () => {
+            if ((currentPage + 1) * trainingsPerPage < trainingsCache.length) {
+                currentPage++;
+                lastTrainingsDiv.innerHTML = renderTrainingsPage(trainingsCache, currentPage);
+                addTrainingsNavListeners();
+                // Restore details if selected training is on this page
+                if (
+                    selectedTrainingIndex !== null &&
+                    selectedTrainingIndex >= currentPage * trainingsPerPage &&
+                    selectedTrainingIndex < Math.min((currentPage + 1) * trainingsPerPage, trainingsCache.length)
+                ) {
+                    showTrainingDetails(trainingsCache[selectedTrainingIndex]);
+                } else {
+                    document.getElementById('trainingDetails').innerHTML = '';
+                }
+                // Re-add click listeners for training items
+                document.querySelectorAll('.training-item').forEach(item => {
+                    item.addEventListener('click', function () {
+                        const idx = parseInt(this.getAttribute('data-index'));
+                        selectedTrainingIndex = idx;
+                        showTrainingDetails(trainingsCache[idx]);
+                    });
+                });
+            }
+        };
+    }
+}
+
+// Helper to get today's date in YYYY-MM-DD format
+function getTodayDateString() {
+    const today = new Date();
+    return today.toISOString().slice(0, 10);
+}
+
+// Fetch today's activities from Strava
+async function fetchTodaysStravaActivities(accessToken) {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() / 1000;
+    const endOfDay = startOfDay + 86400;
+
+    const url = `https://www.strava.com/api/v3/athlete/activities?after=${startOfDay}&before=${endOfDay}&per_page=10`;
+    const response = await fetch(url, {
+        headers: {
+            'Authorization': `Bearer ${accessToken}`
+        }
+    });
+    if (!response.ok) throw new Error('Failed to fetch Strava activities');
+    return await response.json();
+}
+
+async function refreshStravaAccessToken(refreshToken) {
+    const client_id = '164917';
+    const client_secret = 'b2f41f859d5860b1c8e0103b9b6a8667489c78d7';
+    const params = new URLSearchParams({
+        client_id,
+        client_secret,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken
+    });
+    const response = await fetch('https://www.strava.com/api/v3/oauth/token', {
+        method: 'POST',
+        body: params
+    });
+    if (!response.ok) throw new Error('Failed to refresh Strava token');
+    return await response.json();
+}
+
+async function checkAndFetchTodaysTraining(user) {
+    const statusDiv = document.getElementById('trainingStatus');
+    if (statusDiv) statusDiv.textContent = "Checking today's training...";
+
+    // 1. Check if today's training exists in Firestore
+    const trainingsRef = collection(db, "users", user.uid, "trainings");
+    const todayStr = getTodayDateString();
+    const q = query(trainingsRef, where("date", "==", todayStr));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+        if (statusDiv) statusDiv.textContent = "Today's training is loaded.";
+        return;
+    }
+
+    // 2. Get Strava access token
+    const stravaDocRef = doc(db, "users", user.uid, "strava", "connection");
+    const stravaDoc = await getDoc(stravaDocRef);
+    if (!stravaDoc.exists() || !stravaDoc.data().connected) {
+        if (statusDiv) statusDiv.textContent = "No Strava training loaded (not connected).";
+        return;
+    }
+    let accessToken = stravaDoc.data().accessToken;
+    let refreshToken = stravaDoc.data().refreshToken;
+    let expiresAt = stravaDoc.data().expiresAt;
+
+    // Check if token is expired
+    if (expiresAt && Date.now() / 1000 > expiresAt) {
+        try {
+            const tokenData = await refreshStravaAccessToken(refreshToken);
+            accessToken = tokenData.access_token;
+            refreshToken = tokenData.refresh_token;
+            expiresAt = tokenData.expires_at;
+            // Save new tokens to Firestore
+            await setDoc(stravaDocRef, {
+                accessToken,
+                refreshToken,
+                expiresAt
+            }, { merge: true });
+        } catch (err) {
+            if (statusDiv) statusDiv.textContent = "Failed to refresh Strava token.";
+            return;
+        }
+    }
+
+    // 3. Fetch today's activities from Strava
+    try {
+        const activities = await fetchTodaysStravaActivities(accessToken);
+        if (activities.length > 0) {
+            // For each Strava activity, check if it's already in Firestore (by id or date+type)
+            for (const activity of activities) {
+                const trainingId = "strava_" + activity.id;
+                const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
+                const trainingSnap = await getDoc(trainingRef);
+                if (!trainingSnap.exists()) {
+                    // Extract values
+                    const durationMinutes = activity.moving_time ? activity.moving_time / 60 : 0;
+                    const distance = activity.distance ? activity.distance / 1000 : 0; // meters to km
+                    const totalClimb = activity.total_elevation_gain || 0;
+                    const hrAvg = activity.average_heartrate || 0;
+
+                    // Fetch laps if available (Strava API v3: GET /activities/{id}/laps)
+                    let laps = [];
+                    let hrAvgLaps = [];
+                    if (activity.hasOwnProperty('laps')) {
+                        laps = activity.laps;
+                        hrAvgLaps = laps.map(lap => lap.average_heartrate || null);
+                    } else {
+                        // Optionally fetch laps via another API call if you want more detail
+                        // (not shown here for brevity)
+                    }
+
+                    // Calculate TRIMP and GRIT as before
+                    const maxHr = parseFloat(activity.max_heartrate) || 190;
+                    const restHr = 60;
+                    const lambda = 1.92;
+                    const HRr = maxHr && restHr ? (hrAvg - restHr) / (maxHr - restHr) : 0;
+                    const trimp = durationMinutes * HRr * 0.64 * Math.exp(lambda * HRr);
+
+                    const trainingData = {
+                        title: activity.name,
+                        date: activity.start_date_local ? activity.start_date_local.slice(0, 10) : "",
+                        type: activity.type ? activity.type.toLowerCase() : "other",
+                        intervals: [], // Strava doesn't have intervals unless you parse laps
+                        trimp: trimp || 0,
+                        gritScore: 0,
+                        source: "strava",
+                        stravaId: activity.id,
+                        createdAt: new Date().toISOString(),
+                        durationMinutes,
+                        distance,
+                        totalClimb,
+                        hrAvg,
+                        laps,
+                        hrAvgLaps
+                    };
+                    await setDoc(trainingRef, trainingData);
+                }
+            }
+            if (statusDiv) statusDiv.textContent = "Today's Strava training loaded!";
+            // Optionally, refresh your last trainings display
+            trainingsCache = []; // clear cache so new trainings are shown
+            await displayLastTrainings();
+        } else {
+            if (statusDiv) statusDiv.textContent = "No Strava training found for today.";
+        }
+    } catch (err) {
+        if (statusDiv) statusDiv.textContent = "Error fetching Strava training.";
+    }
+
+    toggleAddTrainingForm();
+}
+
+async function toggleAddTrainingForm() {
+    const user = auth.currentUser;
+    const formContainer = document.getElementById('addTrainingFormContainer');
+    const headline = document.getElementById('addTrainingHeadline');
+    if (!user || !formContainer || !headline) return;
+
+    // Check Strava connection
+    const stravaDoc = await getDoc(doc(db, "users", user.uid, "strava", "connection"));
+    if (stravaDoc.exists() && stravaDoc.data().connected) {
+        // Hide form by default, show headline
+        formContainer.style.display = "none";
+        headline.style.cursor = "pointer";
+        // Toggle form on headline click
+        headline.onclick = () => {
+            formContainer.style.display = (formContainer.style.display === "none") ? "block" : "none";
+        };
+    } else {
+        // Show form by default, headline not clickable
+        formContainer.style.display = "block";
+        headline.style.cursor = "default";
+        headline.onclick = null;
+    }
+}
+
+// --- DOMContentLoaded and Auth logic ---
 
 document.addEventListener('DOMContentLoaded', async function () {
     const addIntervalButton = document.getElementById('addIntervalButton');
@@ -285,137 +674,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         updatePreview();
     });
 
-    let trainingsCache = [];
-    let currentPage = 0;
-    const trainingsPerPage = 5;
-
-    async function fetchAllTrainings() {
-        const user = auth.currentUser;
-        if (!user) return [];
-        const trainingsRef = collection(db, "users", user.uid, "trainings");
-        const q = query(trainingsRef, orderBy("createdAt", "desc"));
-        const querySnapshot = await getDocs(q);
-        const trainings = [];
-        querySnapshot.forEach(docSnap => {
-            const t = docSnap.data();
-            trainings.push(t);
-        });
-        return trainings;
-    }
-
-    function renderTrainingsPage(trainings, page) {
-        let html = "<h3>Last Trainings</h3>";
-        if (trainings.length === 0) {
-            html += "<p>No trainings found.</p>";
-        } else {
-            html += "<ul>";
-            const start = page * trainingsPerPage;
-            const end = Math.min(start + trainingsPerPage, trainings.length);
-            for (let i = start; i < end; i++) {
-                const t = trainings[i];
-                html += `<li class="training-item" data-index="${i}">
-                    <strong>${t.title || 'No title'}</strong> (${t.date || 'No date'})<br>
-                    Type: ${t.type || ''}<br>
-                    Intervals: ${t.intervals ? t.intervals.length : 0}
-                </li>`;
-            }
-            html += "</ul>";
-            // Navigation arrows
-            html += `<div style="margin-top:10px;">`;
-            html += `<button id="prevTrainings" ${page === 0 ? "disabled" : ""}>&larr; Prev</button>`;
-            html += `<span style="margin:0 10px;">Page ${page + 1} of ${Math.ceil(trainings.length / trainingsPerPage)}</span>`;
-            html += `<button id="nextTrainings" ${end >= trainings.length ? "disabled" : ""}>Next &rarr;</button>`;
-            html += `</div>`;
-        }
-        // Add a container for training details
-        html += `<div id="trainingDetails"></div>`;
-        return html;
-    }
-
-    async function displayLastTrainings() {
-        const lastTrainingsDiv = document.getElementById('lastTrainings');
-        if (!lastTrainingsDiv) return;
-        const user = auth.currentUser;
-        if (!user) {
-            lastTrainingsDiv.innerHTML = "<h3>Last Trainings</h3><p>Please log in to see your last trainings.</p>";
-            return;
-        }
-        // Fetch and cache all trainings only once per session
-        if (trainingsCache.length === 0) {
-            trainingsCache = await fetchAllTrainings();
-        }
-        lastTrainingsDiv.innerHTML = renderTrainingsPage(trainingsCache, currentPage);
-
-        // Add event listeners for navigation
-        addTrainingsNavListeners();
-
-        // Add click listeners for training items
-        document.querySelectorAll('.training-item').forEach(item => {
-            item.addEventListener('click', function () {
-                const idx = parseInt(this.getAttribute('data-index'));
-                showTrainingDetails(trainingsCache[idx]);
-            });
-        });
-    }
-
-    function showTrainingDetails(training) {
-        const detailsDiv = document.getElementById('trainingDetails');
-        if (!detailsDiv || !training) return;
-        let html = `<h4>Training Details</h4>`;
-        html += `<strong>Title:</strong> ${training.title || ''}<br>`;
-        html += `<strong>Date:</strong> ${training.date || ''}<br>`;
-        html += `<strong>Type:</strong> ${training.type || ''}<br>`;
-        html += `<strong>Total TRIMP:</strong> ${typeof training.trimp === 'number' ? training.trimp.toFixed(2) : 'N/A'}<br>`;
-        // Always use the already saved gritScore value
-        html += `<strong>GRIT Score:</strong> ${typeof training.gritScore === 'number' ? training.gritScore.toFixed(2) : (training.gritScore || 'N/A')}<br>`;
-        if (training.intervals && training.intervals.length > 0) {
-            html += `<strong>Intervals:</strong><ul>`;
-            training.intervals.forEach((interval, i) => {
-                html += `<li>
-                    <strong>Interval ${i + 1}:</strong>
-                    Duration: ${interval.duration}, 
-                    Distance: ${interval.distance} km, 
-                    HR Avg: ${interval.hrAvg}, 
-                    RPE: ${interval.rpe}
-                </li>`;
-            });
-            html += `</ul>`;
-        }
-        detailsDiv.innerHTML = html;
-    }
-
-    // Helper to re-add listeners after re-render
-    function addTrainingsNavListeners() {
-        const prevBtn = document.getElementById('prevTrainings');
-        const nextBtn = document.getElementById('nextTrainings');
-        const lastTrainingsDiv = document.getElementById('lastTrainings');
-        if (prevBtn) {
-            prevBtn.onclick = () => {
-                if (currentPage > 0) {
-                    currentPage--;
-                    lastTrainingsDiv.innerHTML = renderTrainingsPage(trainingsCache, currentPage);
-                    addTrainingsNavListeners();
-                }
-            };
-        }
-        if (nextBtn) {
-            nextBtn.onclick = () => {
-                if ((currentPage + 1) * trainingsPerPage < trainingsCache.length) {
-                    currentPage++;
-                    lastTrainingsDiv.innerHTML = renderTrainingsPage(trainingsCache, currentPage);
-                    addTrainingsNavListeners();
-                }
-            };
-        }
-    }
-
-    // When a new training is saved, reset cache and page
-    async function refreshTrainingsAfterSave() {
-        trainingsCache = [];
-        currentPage = 0;
-        await displayLastTrainings();
-    }
-
     saveTrainingButton.addEventListener('click', async function () {
         if (!validateTrainingInputs()) {
             showMessage('Please fill in all required training fields before saving.', 'red');
@@ -687,6 +945,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     displayLastTrainings();
     displayAllTimeGritScore();
     displayCurrentStreak();
+
+    
 });
 
 
@@ -697,4 +957,27 @@ async function updateGritScores(userId, newScores) {
         await setDoc(doc(db, "users", userId, "grit", period), { score: newScores[period] || 0 });
     }
 }
+
+// Strava integration and auto-fetch today's training
+onAuthStateChanged(auth, (user) => {
+    const statusDiv = document.getElementById('trainingStatus');
+    if (!user) {
+        if (statusDiv) statusDiv.textContent = "Not logged in.";
+        return;
+    }
+    checkAndFetchTodaysTraining(user);
+    toggleAddTrainingForm();
+});
+
+// Listen for changes in Strava connection
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        const stravaDocRef = doc(db, "users", user.uid, "strava", "connection");
+        onSnapshot(stravaDocRef, () => {
+            toggleAddTrainingForm();
+        });
+    }
+});
+
+
 

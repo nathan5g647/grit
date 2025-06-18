@@ -90,7 +90,20 @@
             </form>
             <div id="loginMessage" style="color: #a00;"></div>
         </section>
+
+        <button id="stravaSignInBtn" style="background:#fc4c02;color:white;padding:10px 20px;border:none;border-radius:4px;cursor:pointer;">
+            Sign in with Strava
+        </button>
     </main>
+
+    <div id="usernameModal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
+  <div style="background:white;padding:30px;border-radius:8px;text-align:center;">
+    <h3>Choose a username</h3>
+    <input id="usernameInput" type="text" style="padding:8px;width:80%;" maxlength="20" />
+    <br><br>
+    <button id="usernameSubmit" style="background:#BF1A2F;color:white;padding:8px 20px;border:none;border-radius:4px;cursor:pointer;">Save</button>
+  </div>
+</div>
 
     <script type="module">
     import { auth, db, ensureUserDocExists } from './script.js';
@@ -103,16 +116,19 @@
         const loginForm = document.getElementById('loginForm');
         const signupHeading = document.getElementById('signupHeading');
         const loginHeading = document.getElementById('loginHeading');
+        const stravaBtn = document.getElementById('stravaSignInBtn');
         if (user) {
             if (signupForm) signupForm.style.display = 'none';
             if (loginForm) loginForm.style.display = 'none';
             if (signupHeading) signupHeading.style.display = 'none';
             if (loginHeading) loginHeading.style.display = 'none';
+            if (stravaBtn) stravaBtn.style.display = 'none';
         } else {
             if (signupForm) signupForm.style.display = '';
             if (loginForm) loginForm.style.display = '';
             if (signupHeading) signupHeading.style.display = '';
             if (loginHeading) loginHeading.style.display = '';
+            if (stravaBtn) stravaBtn.style.display = 'inline-block';
         }
     });
 
@@ -168,6 +184,72 @@
                 document.getElementById('loginMessage').textContent = error.message;
             });
     });
+
+    document.getElementById('stravaSignInBtn').onclick = function() {
+        const client_id = '164917';
+        const redirect_uri = 'https://grit-802e6.web.app/index.html'; // e.g. https://yourapp.com/
+        const scope = 'activity:read_all,profile:read_all';
+        const url = `https://www.strava.com/oauth/authorize?client_id=${client_id}&response_type=code&redirect_uri=${encodeURIComponent(redirect_uri)}&approval_prompt=auto&scope=${scope}`;
+        window.location.href = url;
+    };
+
+    async function handleStravaRedirect() {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
+        if (!code) return;
+
+        // Exchange code for tokens (call your Cloud Function)
+        const res = await fetch('https://us-central1-YOUR_PROJECT.cloudfunctions.net/stravaTokenExchange?code=' + code);
+        const data = await res.json();
+
+        // Get Strava athlete ID
+        const athleteId = data.athlete.id;
+
+        // Check if user exists in Firestore
+        const userRef = doc(db, "users", athleteId, "settings", "profile");
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+            // Show username popup
+            showUsernamePopup(async (username) => {
+                await setDoc(userRef, {
+                    username,
+                    email: data.athlete.email || "",
+                    name: data.athlete.firstname + " " + data.athlete.lastname,
+                    country: data.athlete.country || "",
+                    // ...other profile fields
+                });
+                // Save Strava tokens
+                await setDoc(doc(db, "users", athleteId, "strava", "connection"), {
+                    connected: true,
+                    accessToken: data.access_token,
+                    refreshToken: data.refresh_token,
+                    expiresAt: data.expires_at,
+                    connectedAt: new Date().toISOString()
+                });
+                // Redirect to dashboard or reload
+                window.location.href = '/dashboard.html';
+            });
+        } else {
+            // Existing user, log them in (set session, etc.)
+            window.location.href = '/dashboard.html';
+        }
+    }
+    handleStravaRedirect();
+
+    function showUsernamePopup(onSubmit) {
+    const modal = document.getElementById('usernameModal');
+    modal.style.display = 'flex';
+    document.getElementById('usernameSubmit').onclick = function() {
+        const username = document.getElementById('usernameInput').value.trim();
+        if (username.length < 3) {
+            alert('Username must be at least 3 characters.');
+            return;
+        }
+        modal.style.display = 'none';
+        onSubmit(username);
+    };
+}
     </script>
 </body>
 <footer>

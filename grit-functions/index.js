@@ -1,5 +1,4 @@
 const functions = require('firebase-functions');
-
 const cors = require('cors')({ origin: true });
 
 exports.stravaTokenExchange = functions.https.onRequest((req, res) => {
@@ -10,7 +9,7 @@ exports.stravaTokenExchange = functions.https.onRequest((req, res) => {
         }
 
         const client_id = '164917';
-        const client_secret = 'b2f41f859d5860b1c8e0103b9b6a8667489c78d7'; // Make sure this is correct!
+        const client_secret = 'b2f41f859d5860b1c8e0103b9b6a8667489c78d7';
 
         const params = new URLSearchParams({
             client_id,
@@ -26,9 +25,8 @@ exports.stravaTokenExchange = functions.https.onRequest((req, res) => {
             });
             const data = await response.json();
             if (response.ok) {
-                res.json(data);
+                res.json(data); // Frontend will save tokens
             } else {
-                // Send the Strava error directly to the browser!
                 res.status(response.status).json({ error: 'Strava error', details: data });
             }
         } catch (err) {

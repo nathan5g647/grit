@@ -22,9 +22,10 @@
         </nav>
     </header>
     </header>
+    <div id="trainingStatus" style="text-align:center; margin: 20px 0; font-weight:bold;"></div>
     <h1>Dashboard</h1>
-<h2>Add Training</h2>
-    <br />
+<h2 id="addTrainingHeadline" style="cursor:pointer;">Add Training</h2>
+<div id="addTrainingFormContainer">
     <label for="trainingTitle">Title:</label>
     <input type="text" id="trainingTitle" name="trainingTitle" placeholder= "Morning run" required />
     <br />
@@ -57,8 +58,8 @@
     <br />
     <button id="addIntervalButton">Add Interval</button>
     <button id="saveTraining">Save Training</button>
-    
     <br />
+</div>
 
     <div id="lastTrainings"></div> 
 

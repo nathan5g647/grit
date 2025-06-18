@@ -62,16 +62,16 @@ form.onsubmit = async (e) => {
 
     // Only update editable fields
     const updatedData = {
-        sex: document.getElementById('sex')?.value || '',
-        dob: document.getElementById('dob')?.value || '',
-        city: document.getElementById('city')?.value || '',
-        height: document.getElementById('height')?.value || '',
-        weight: document.getElementById('weight')?.value || '',
-        maxHr: document.getElementById('maxHr')?.value || '',
-        restHr: document.getElementById('restHr')?.value || ''
+        sex: document.getElementById('sex')?.value || currentData.sex || '',
+        dob: document.getElementById('dob')?.value || currentData.dob || '',
+        city: document.getElementById('city')?.value || currentData.city || '',
+        height: document.getElementById('height')?.value || currentData.height || '',
+        weight: document.getElementById('weight')?.value || currentData.weight || '',
+        maxHr: document.getElementById('maxHr')?.value || currentData.maxHr || '',
+        restHr: document.getElementById('restHr')?.value || currentData.restHr || ''
     };
 
-    // Merge with existing data, but never overwrite username or other fields
+    // Merge with ALL existing data, not just editable fields
     const mergedData = { ...currentData, ...updatedData };
 
     await setDoc(docRef, mergedData, { merge: true });
@@ -93,10 +93,11 @@ onAuthStateChanged(auth, async (user) => {
             .then(res => res.json())
             .then(async data => {
                 if (data.access_token) {
-                    // ONLY update the strava/connection doc!
                     await setDoc(doc(db, "users", user.uid, "strava", "connection"), {
                         connected: true,
                         accessToken: data.access_token,
+                        refreshToken: data.refresh_token, // <-- ADD THIS
+                        expiresAt: data.expires_at,       // <-- ADD THIS
                         connectedAt: new Date().toISOString()
                     });
                     window.location.href = window.location.pathname; // Clean up URL
@@ -167,7 +168,18 @@ async function updateStravaStatus() {
             disconnectBtn.style.marginTop = '10px';
             disconnectBtn.onclick = async function() {
                 await deleteDoc(stravaDocRef);
-                updateStravaStatus();
+                // Reload settings summary after disconnect
+                const user = auth.currentUser;
+                if (user) {
+                    const docRef = doc(db, "users", user.uid, "settings", "profile");
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        displaySettingsAsText(docSnap.data());
+                    } else {
+                        fillForm({});
+                        updateStravaStatus();
+                    }
+                }
             };
             btnContainer.appendChild(disconnectBtn);
         }
