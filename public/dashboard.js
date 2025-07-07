@@ -986,27 +986,43 @@ for (const activity of activities) {
     const trainingSnap = await getDoc(trainingRef);
 
     if (!trainingSnap.exists()) {
-        // Build your trainingData object as before
-        const duration = secondsToHHMMSS(activity.moving_time || 0);
+        // Prepare values
+        const durationSec = activity.moving_time || 0;
+        const duration = secondsToHHMMSS(durationSec); // "hh:mm:ss"
         const distance = (activity.distance ? (activity.distance / 1000).toFixed(2) : "0.00"); // as string
         const climb = activity.total_elevation_gain || 0;
         const hrAvg = activity.average_heartrate ? activity.average_heartrate.toString() : ""; // as string
+
+        // Calculate TRIMP
+        const maxHr = parseFloat(activity.max_heartrate) || 190;
+        const restHr = 60;
+        const HRr = (parseFloat(hrAvg) - restHr) / (maxHr - restHr);
+        const trimp = (durationSec / 60) * HRr * 0.64 * Math.exp(1.92 * HRr);
+
+        // Create a single interval with all data
+        const intervals = [{
+            duration: duration,      // "hh:mm:ss"
+            distance: distance,      // string, km
+            hrAvg: hrAvg,            // string
+            rpe: ""                  // unknown from Strava
+        }];
+
         const trainingData = {
-    createdAt: new Date().toISOString(),
-    date: (activity.start_date_local || '').slice(0, 10),
-    title: activity.name,
-    type: (activity.type || 'other').toLowerCase(),
-    intervals: [], // Strava doesn't provide intervals, unless you parse laps
-    distance,      // string, e.g. "12.57"
-    duration,      // string, e.g. "01:56:08"
-    climb,         // number
-    hrAvg,         // string
-    trimp,         // your calculated value
-    gritScore: 0,  // will be updated after calculation
-    source: 'strava',
-    stravaId: activity.id
-};
-await setDoc(trainingRef, trainingData);
+            createdAt: new Date().toISOString(),
+            date: (activity.start_date_local || '').slice(0, 10),
+            title: activity.name,
+            type: (activity.type || 'other').toLowerCase(),
+            intervals: intervals,
+            distance: distance,
+            duration: duration,
+            climb: climb,
+            hrAvg: hrAvg,
+            trimp: trimp,
+            gritScore: 0, // will be updated after calculation
+            source: 'strava',
+            stravaId: activity.id
+        };
+        await setDoc(trainingRef, trainingData);
 
         // Calculate and update gritScore
         const streak = await getStreak(user);
