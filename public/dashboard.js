@@ -409,24 +409,18 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Fetch user settings from Firestore
     auth.onAuthStateChanged(async (user) => {
         if (user) {
-            const docRef = doc(db, "users", user.uid, "settings", "profile");
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                maxHr = parseFloat(data.maxHr) || maxHr;
-                restHr = parseFloat(data.restHr) || restHr;
-                // Optionally set lambda based on sex
-                if (data.sex && data.sex.toLowerCase() === 'female') {
-                    lambda = 1.67;
-                } else {
-                    lambda = 1.92;
-                }
-            }
+            await checkAndFetchTodaysTraining(user);
+            await toggleAddTrainingForm();
+            await displayLastTrainings();
+            await displayAllTimeGritScore();
+            await displayCurrentStreak();
+        } else {
+            // Hide form and show login message
+            const formContainer = document.getElementById('addTrainingFormContainer');
+            const headline = document.getElementById('addTrainingHeadline');
+            if (formContainer) formContainer.style.display = "none";
+            if (headline) headline.style.cursor = "default";
         }
-        updatePreview();
-        displayLastTrainings();
-        displayAllTimeGritScore();
-        displayCurrentStreak(); // <-- add this line
     });
 
     function calcTRIMP(intervals, maxHr, restHr, lambda) {
