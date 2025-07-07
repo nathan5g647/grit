@@ -215,20 +215,176 @@ function getTodayDateString() {
 }
 
 // Fetch today's activities from Strava
-async function fetchTodaysStravaActivities(accessToken) {
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() / 1000;
-    const endOfDay = startOfDay + 86400;
+async function checkAndFetchLast7DaysStravaTrainings(user) {
+    const statusDiv = document.getElementById('trainingStatus');
+    if (statusDiv) statusDiv.textContent = "Checking Strava trainings (last 7 days)...";
 
-    const url = `https://www.strava.com/api/v3/athlete/activities?after=${startOfDay}&before=${endOfDay}&per_page=10`;
-    const response = await fetch(url, {
-        headers: {
-            'Authorization': `Bearer ${accessToken}`
+    // 1. Get Strava access token
+    const stravaDocRef = doc(db, "users", user.uid, "strava", "connection");
+    const stravaDoc = await getDoc(stravaDocRef);
+    if (!stravaDoc.exists() || !stravaDoc.data().connected) {
+        if (statusDiv) statusDiv.textContent = "No Strava training loaded (not connected).";
+        return;
+    }
+    let accessToken = stravaDoc.data().accessToken;
+    let refreshToken = stravaDoc.data().refreshToken;
+    let expiresAt = stravaDoc.data().expiresAt;
+
+    // Check if token is expired
+    if (expiresAt && Date.now() / 1000 > expiresAt) {
+        try {
+            const tokenData = await refreshStravaAccessToken(refreshToken);
+            accessToken = tokenData.access_token;
+            refreshToken = tokenData.refresh_token;
+            expiresAt = tokenData.expires_at;
+            await setDoc(stravaDocRef, {
+                accessToken,
+                refreshToken,
+                expiresAt
+            }, { merge: true });
+        } catch (err) {
+            if (statusDiv) statusDiv.textContent = "Failed to refresh Strava token.";
+            return;
         }
-    });
-    if (!response.ok) throw new Error('Failed to fetch Strava activities');
-    return await response.json();
+    }
+
+    // 2. Fetch last 7 days' activities from Strava
+    try {
+        const now = new Date();
+        const startOf7Days = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0);
+        const after = Math.floor(startOf7Days.getTime() / 1000);
+        const before = Math.floor(now.getTime() / 1000) + 86400; // include today
+        const url = `https://www.strava.com/api/v3/athlete/activities?after=${after}&before=${before}&per_page=50`;
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+        if (!response.ok) throw new Error('Failed to fetch Strava activities');
+        const activities = await response.json();
+
+        if (activities.length) {
+            let didRefresh = false;
+            for (const act of activities) {
+                const trainingId = 'strava_' + act.id;
+                const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
+                const snap = await getDoc(trainingRef);
+
+                if (!snap.exists()) {
+                    // Save Strava activity in manual format (root fields, not intervals)
+                    const duration = act.elapsed_time ? act.elapsed_time / 60 : 0;
+                    const distance = act.distance ? act.distance / 1000 : 0;
+                    const climb = act.total_elevation_gain || 0;
+                    const hrAvg = act.average_heartrate || 0;
+                    const maxHr = parseFloat(act.max_heartrate) || 190;
+                    const restHr = 60;
+                    const HRr = (hrAvg - restHr) / (maxHr - restHr);
+                    const trimp = duration * HRr * 0.64 * Math.exp(1.92 * HRr);
+
+                    const data = {
+                        title: act.name,
+                        date: (act.start_date_local || '').slice(0, 10),
+                        type: (act.type || 'other').toLowerCase(),
+                        duration: duration,
+                        distance: distance,
+                        climb: climb,
+                        hrAvg: hrAvg,
+                        trimp: trimp,
+                        gritScore: 0,
+                        source: 'strava',
+                        stravaId: act.id,
+                        createdAt: new Date().toISOString()
+                    };
+                    await setDoc(trainingRef, data);
+                    didRefresh = true;
+                }
+            }
+            if (didRefresh) {
+                trainingsCache = [];
+                await displayLastTrainings();
+            }
+            if (statusDiv) statusDiv.textContent = "Strava trainings loaded (last 7 days)!";
+        } else {
+            if (statusDiv) statusDiv.textContent = "No Strava training found for last 7 days.";
+        }
+    } catch (err) {
+        if (statusDiv) statusDiv.textContent = "Error fetching Strava training.";
+    }
+
+    toggleAddTrainingForm();
 }
+
+// --- Replace your old checkAndFetchTodaysTraining call with this in your auth.onAuthStateChanged or DOMContentLoaded:
+auth.onAuthStateChanged(async (user) => {
+    if (user) {
+        await checkAndFetchLast7DaysStravaTrainings(user);
+        await toggleAddTrainingForm();
+        await displayLastTrainings();
+        await displayAllTimeGritScore();
+        await displayCurrentStreak();
+    }
+});
+
+// --- When saving manual training, save data at the root, not in intervals:
+saveTrainingButton.addEventListener('click', async function () {
+    if (!validateTrainingInputs()) {
+        showMessage('Please fill in all required training fields before saving.', 'red');
+        return;
+    }
+    if (intervals.length === 0) {
+        showMessage('Please add at least one interval before saving the training.', 'red');
+        return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+        showMessage('You must be logged in to save training.', 'red');
+        return;
+    }
+
+    // Calculate totals from intervals
+    let totalDistance = 0, totalDuration = 0, totalHr = 0;
+    intervals.forEach(interval => {
+        totalDistance += parseFloat(interval.distance) || 0;
+        // Duration (convert from HH:MM:SS or MM:SS to minutes)
+        let parts = interval.duration.split(':').map(Number);
+        let minutes = 0;
+        if (parts.length === 3) {
+            minutes = parts[0] * 60 + parts[1] + parts[2] / 60;
+        } else if (parts.length === 2) {
+            minutes = parts[0] + parts[1] / 60;
+        } else if (parts.length === 1) {
+            minutes = parts[0];
+        }
+        totalDuration += minutes;
+        totalHr += parseFloat(interval.hrAvg) || 0;
+    });
+    const avgHr = intervals.length ? (totalHr / intervals.length).toFixed(1) : '0';
+    const totalTRIMP = calcTRIMP(intervals, maxHr, restHr, lambda);
+    const streak = await getStreak(user);
+
+    // Save manual training with root fields
+    const trainingData = {
+        title: document.getElementById('trainingTitle').value,
+        date: document.getElementById('trainingDate').value,
+        type: document.getElementById('trainingType').value,
+        duration: totalDuration,
+        distance: totalDistance,
+        hrAvg: avgHr,
+        intervals: intervals,
+        createdAt: new Date().toISOString(),
+        trimp: totalTRIMP,
+        gritScore: 0 // temporary, will update after
+    };
+
+    try {
+        const trainingsRef = collection(db, "users", user.uid, "trainings");
+        const docRef = await addDoc(trainingsRef, trainingData);
+        // ...rest of your logic unchanged...
+    } catch (error) {
+        showMessage('Error saving training: ' + error.message, 'red');
+    }
+});
 
 async function refreshStravaAccessToken(refreshToken) {
     const client_id = '164917';
