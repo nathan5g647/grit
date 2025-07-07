@@ -290,50 +290,65 @@ async function checkAndFetchTodaysTraining(user) {
     try {
         const activities = await fetchTodaysStravaActivities(accessToken);
         if (activities.length) {
-          let didRefresh = false;
+            let didRefresh = false;
 
-          for (const act of activities) {
-            const trainingId  = 'strava_' + act.id;
-            const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
-            const snap        = await getDoc(trainingRef);
-            let isNew         = false;
+            for (const act of activities) {
+                const trainingId  = 'strava_' + act.id;
+                const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
+                const snap        = await getDoc(trainingRef);
 
-            if (!snap.exists()) {
-              // extract & rename fields to match manual schema
-              const duration = act.moving_time ? act.moving_time/60 : 0;
-              const distance = act.distance    ? act.distance/1000 : 0;
-              const climb    = act.total_elevation_gain || 0;
-              const hrAvg    = act.average_heartrate        || 0;
-              // TRIMP
-              const maxHr = parseFloat(act.max_heartrate)||190;
-              const restHr = 60;
-              const HRr = (hrAvg - restHr)/(maxHr - restHr);
-              const trimp = duration * HRr * 0.64 * Math.exp(1.92*HRr);
+                if (!snap.exists()) {
+                    // Prepare values in the same format as manual trainings
+                    const duration = act.moving_time ? secondsToHHMMSS(act.moving_time) : "00:00:00";
+                    const distance = act.distance ? (act.distance / 1000).toFixed(2) : "0.00";
+                    const hrAvg    = act.average_heartrate ? act.average_heartrate.toString() : "";
+                    const maxHr    = parseFloat(act.max_heartrate) || 190;
+                    const restHr   = 60;
+                    const HRr      = (parseFloat(hrAvg) - restHr) / (maxHr - restHr);
+                    const trimp    = ((act.moving_time || 0) / 60) * HRr * 0.64 * Math.exp(1.92 * HRr);
 
-              const data = {
-                title:     act.name,
-                date:      (act.start_date_local||'').slice(0,10),
-                type:      (act.type||'other').toLowerCase(),
-                intervals: [],
-               
-                duration, distance, climb, hrAvg,
-                trimp, gritScore:0,
-                source:'strava', stravaId:act.id,
-                createdAt:new Date().toISOString()
-              };
-              await setDoc(trainingRef, data);
-              isNew = true;
+                    const intervals = [{
+                        duration: duration,
+                        distance: distance,
+                        hrAvg: hrAvg,
+                        rpe: "",
+                        trimp: trimp
+                    }];
+
+                    const data = {
+                        title:     act.name,
+                        date:      (act.start_date_local||'').slice(0,10),
+                        type:      (act.type||'other').toLowerCase(),
+                        intervals: intervals,
+                        trimp:     trimp,
+                        gritScore: 0,
+                        source:    'strava',
+                        stravaId:  act.id,
+                        createdAt: new Date().toISOString()
+                    };
+                    await setDoc(trainingRef, data);
+
+                    // Calculate and update gritScore
+                    const streak = await getStreak(user);
+                    const { avg: a7 } = await getTrainingsForPeriod(user, 7);
+                    const { avg: a28 } = await getTrainingsForPeriod(user, 28);
+                    const newGrit = calcGRIT({
+                        trimp: data.trimp,
+                        streak,
+                        trimpAvg7: a7,
+                        trimpAvg28: a28
+                    });
+                    await setDoc(trainingRef, { gritScore: newGrit }, { merge: true });
+                    didRefresh = true;
+                }
             }
 
+            if (didRefresh) {
+                trainingsCache = [];
+                await displayLastTrainings();
+            }
 
-          }
-
-          if (didRefresh) {
-            trainingsCache = [];
-            await displayLastTrainings();
-          }
-
-          if (statusDiv) statusDiv.textContent = "Today's Strava training loaded!";
+            if (statusDiv) statusDiv.textContent = "Today's Strava training loaded!";
         } else {
             if (statusDiv) statusDiv.textContent = "No Strava training found for today.";
         }
@@ -964,7 +979,6 @@ for (const activity of activities) {
             distance: distance,      // string, km
             hrAvg: hrAvg,            // string
             rpe: "",                 // unknown from Strava
-            // Optionally, you can add trimp here if you want to match manual
             trimp: trimp
         }];
 
