@@ -94,12 +94,46 @@ function showTrainingDetails(training) {
     const detailsDiv = document.getElementById('trainingDetails');
     if (!detailsDiv || !training) return;
 
-    const disp = (key, unit = '') =>
-      training[key] !== undefined
-        ? (typeof training[key] === 'number'
-            ? parseFloat(training[key]).toFixed(2)
-            : training[key]) + unit
-        : '—';
+    // If root fields are missing, calculate from intervals
+    let duration = training.duration;
+    let distance = training.distance;
+    let climb = training.climb;
+    let hrAvg = training.hrAvg;
+
+    if ((!duration || duration === "0" || duration === 0) && training.intervals?.length) {
+        // Sum durations in seconds, then format as minutes (for display)
+        let totalSec = 0;
+        training.intervals.forEach(i => {
+            if (i.duration) {
+                const parts = i.duration.split(':').map(Number);
+                if (parts.length === 3) totalSec += parts[0]*3600 + parts[1]*60 + parts[2];
+                else if (parts.length === 2) totalSec += parts[0]*60 + parts[1];
+                else if (parts.length === 1) totalSec += parts[0];
+            }
+        });
+        duration = (totalSec / 60).toFixed(2);
+    }
+    if ((!distance || distance === "0" || distance === 0) && training.intervals?.length) {
+        let totalDist = 0;
+        training.intervals.forEach(i => {
+            if (i.distance) totalDist += parseFloat(i.distance) || 0;
+        });
+        distance = totalDist.toFixed(2);
+    }
+    if ((!hrAvg || hrAvg === "0" || hrAvg === 0) && training.intervals?.length) {
+        let totalHr = 0, count = 0;
+        training.intervals.forEach(i => {
+            if (i.hrAvg) { totalHr += parseFloat(i.hrAvg) || 0; count++; }
+        });
+        hrAvg = count ? (totalHr / count).toFixed(1) : "N/A";
+    }
+    if ((!climb || climb === "0" || climb === 0) && training.intervals?.length) {
+        // If you ever add climb to intervals, sum here. For now:
+        climb = "N/A";
+    }
+
+    // Helper for N/A
+    const na = v => (v === undefined || v === null || v === "" || v === "N/A" || v === 0) ? "N/A" : v;
 
     let html = `
       <div style="display:flex;justify-content:center;align-items:center;position:relative;margin-bottom:10px;">
@@ -114,16 +148,16 @@ function showTrainingDetails(training) {
         <strong>Title:</strong> ${training.title || '—'}<br>
         <strong>Date:</strong> ${training.date || '—'}<br>
         <strong>Type:</strong> ${training.type || '—'}<br>
-        <strong>Duration:</strong> ${disp('duration',' min')}<br>
-        <strong>Distance:</strong> ${disp('distance',' km')}<br>
-        <strong>Climb:</strong> ${disp('climb',' m')}<br>
-        <strong>Avg HR:</strong> ${disp('hrAvg',' bpm')}<br>
-        <strong>TRIMP:</strong> ${disp('trimp')}<br>
-        <strong>GRIT:</strong> ${disp('gritScore')}<br>
+        <strong>Total Duration:</strong> ${na(duration)} min<br>
+        <strong>Total Distance:</strong> ${na(distance)} km<br>
+        <strong>Total Climb:</strong> ${na(climb)} m<br>
+        <strong>Avg Heartrate:</strong> ${na(hrAvg)} bpm<br>
+        <strong>Total TRIMP:</strong> ${training.trimp !== undefined ? parseFloat(training.trimp).toFixed(2) : "N/A"}<br>
+        <strong>GRIT Score:</strong> ${training.gritScore !== undefined ? parseFloat(training.gritScore).toFixed(2) : "N/A"}<br>
       </div>
     `;
 
-    // manual intervals
+    // Intervals
     if (training.intervals?.length) {
       html += `<strong>Intervals:</strong><ul>`;
       training.intervals.forEach((i, idx) => {
@@ -131,8 +165,7 @@ function showTrainingDetails(training) {
       });
       html += `</ul>`;
     }
-
-    // Strava laps
+    // Laps
     if (training.laps?.length) {
       html += `<strong>Laps:</strong><ul>`;
       training.laps.forEach((lap, idx) => {
@@ -141,17 +174,9 @@ function showTrainingDetails(training) {
       html += `</ul>`;
     }
 
-    // render
     detailsDiv.innerHTML = html;
-
-    // close button logic
     const btn = document.getElementById('closeTrainingDetails');
-    if (btn) {
-      btn.onclick = () => {
-        detailsDiv.innerHTML = '';
-        selectedTrainingIndex = null;
-      };
-    }
+    if (btn) btn.onclick = () => { detailsDiv.innerHTML = ''; selectedTrainingIndex = null; };
 }
 
 // Helper to re-add listeners after re-render
@@ -983,7 +1008,7 @@ for (const activity of activities) {
 };
 await setDoc(trainingRef, trainingData);
 
-        // Now calculate and update gritScore as before
+        // Calculate and update gritScore
         const streak = await getStreak(user);
         const { avg: a7 } = await getTrainingsForPeriod(user, 7);
         const { avg: a28 } = await getTrainingsForPeriod(user, 28);
