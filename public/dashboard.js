@@ -962,29 +962,29 @@ for (const activity of activities) {
 
     if (!trainingSnap.exists()) {
         // Build your trainingData object as before
-        const durationSeconds = activity.moving_time || 0;
-        const duration = secondsToHHMMSS(durationSeconds);
+        const duration = secondsToHHMMSS(activity.moving_time || 0);
+        const distance = (activity.distance ? (activity.distance / 1000).toFixed(2) : "0.00"); // as string
+        const climb = activity.total_elevation_gain || 0;
+        const hrAvg = activity.average_heartrate ? activity.average_heartrate.toString() : ""; // as string
 
         const trainingData = {
-            title: activity.name,
+            createdAt: new Date().toISOString(),
             date: (activity.start_date_local || '').slice(0, 10),
+            title: activity.name,
             type: (activity.type || 'other').toLowerCase(),
-            intervals: [],
-            laps: activity.laps || [],
-            duration, // now in "hh:mm:ss" format
-            distance: activity.distance ? activity.distance / 1000 : 0,
-            climb: activity.total_elevation_gain || 0,
-            hrAvg: activity.average_heartrate || 0,
-            trimp: 0, // initial trimp, will be calculated later
-            gritScore: 0,
+            intervals: [], // Strava doesn't provide intervals, unless you parse laps
+            distance,      // string, e.g. "12.57"
+            duration,      // string, e.g. "01:56:08"
+            climb,         // number
+            hrAvg,         // string
+            trimp,         // your calculated value
+            gritScore: 0,  // will be updated after calculation
             source: 'strava',
-            stravaId: activity.id,
-            createdAt: new Date().toISOString()
+            stravaId: activity.id
         };
-
         await setDoc(trainingRef, trainingData);
 
-        // Calculate and update GRIT score as before
+        // Now calculate and update gritScore as before
         const streak = await getStreak(user);
         const { avg: a7 } = await getTrainingsForPeriod(user, 7);
         const { avg: a28 } = await getTrainingsForPeriod(user, 28);
@@ -1002,8 +1002,31 @@ function secondsToHHMMSS(seconds) {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
-    return [h, m, s]
-        .map(v => v < 10 ? "0" + v : v)
-        .join(":");
+    return [h, m, s].map(v => v < 10 ? "0" + v : v).join(":");
 }
+
+// For each Strava activity:
+const duration = secondsToHHMMSS(activity.moving_time || 0);
+const distance = (activity.distance ? (activity.distance / 1000).toFixed(2) : "0.00"); // as string
+const climb = activity.total_elevation_gain || 0;
+const hrAvg = activity.average_heartrate ? activity.average_heartrate.toString() : ""; // as string
+
+const trainingData = {
+    createdAt: new Date().toISOString(),
+    date: (activity.start_date_local || '').slice(0, 10),
+    title: activity.name,
+    type: (activity.type || 'other').toLowerCase(),
+    intervals: [], // Strava doesn't provide intervals, unless you parse laps
+    distance,      // string, e.g. "12.57"
+    duration,      // string, e.g. "01:56:08"
+    climb,         // number
+    hrAvg,         // string
+    trimp,         // your calculated value
+    gritScore: 0,  // will be updated after calculation
+    source: 'strava',
+    stravaId: activity.id
+};
+await setDoc(trainingRef, trainingData);
+
+// Now calculate and update gritScore as before
 
