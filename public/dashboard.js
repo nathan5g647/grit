@@ -258,6 +258,7 @@ async function checkAndFetchTodaysTraining(user) {
     // 2. Get Strava access token
     const stravaDocRef = doc(db, "users", user.uid, "strava", "connection");
     const stravaDoc = await getDoc(stravaDocRef);
+    console.log("Strava doc exists:", stravaDoc.exists(), "Data:", stravaDoc.data());
     if (!stravaDoc.exists() || !stravaDoc.data().connected) {
         if (statusDiv) statusDiv.textContent = "No Strava training loaded (not connected).";
         return;
