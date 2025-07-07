@@ -958,12 +958,14 @@ for (const activity of activities) {
         const HRr = (parseFloat(hrAvg) - restHr) / (maxHr - restHr);
         const trimp = (durationSec / 60) * HRr * 0.64 * Math.exp(1.92 * HRr);
 
-        // Single interval with all data
+        // Single interval with all data (NO root duration/distance/hrAvg)
         const intervals = [{
             duration: duration,      // "hh:mm:ss"
             distance: distance,      // string, km
             hrAvg: hrAvg,            // string
-            rpe: ""                  // unknown from Strava
+            rpe: "",                 // unknown from Strava
+            // Optionally, you can add trimp here if you want to match manual
+            trimp: trimp
         }];
 
         const trainingData = {
