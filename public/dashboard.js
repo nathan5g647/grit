@@ -1,5 +1,5 @@
 import { auth, db } from './script.js';
-import { doc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, setDoc, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+import { doc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, setDoc, where } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
 let selectedTrainingIndex = null;
 let trainingsCache = [];
@@ -134,7 +134,6 @@ function showTrainingDetails(training) {
       });
       html += `</ul>`;
     }
-   
 
     detailsDiv.innerHTML = html;
     const btn = document.getElementById('closeTrainingDetails');
@@ -521,9 +520,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             // RPE
             totalRpe += parseFloat(interval.rpe) || 0;
         });
-
-        
-       
 
         const avgHr = intervals.length ? (totalHr / intervals.length).toFixed(1) : '0';
         const avgRpe = intervals.length ? (totalRpe / intervals.length).toFixed(1) : '0';
