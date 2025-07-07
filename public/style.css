@@ -257,3 +257,21 @@ main {
   height: 32px;
 }
 
+.tagline {
+  font-size: 1.2em;
+  font-weight: 500;
+  color: var(--grit-blue);
+  margin-bottom: 24px;
+}
+
+.main-section ul {
+  text-align: left;
+  max-width: 480px;
+  margin: 0 auto;
+  padding-left: 20px;
+}
+
+.main-section ul li {
+  margin-bottom: 12px;
+  line-height: 1.5em;
+}

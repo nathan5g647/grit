@@ -1,77 +1,66 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>Dashboard</title>
-    <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GRIT — Train Smarter. Stay Consistent.</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-     <header style="margin-bottom: 24px; padding-bottom: 10px;">
-     <div class="grit-logo">
-    <img src="image/logo.jpg" alt="GRIT Logo" class="grit-logo-img">
-</div>
-           <nav>
-            <a href="search.html">Search Users</a> |
-            <a href="index.html">Home</a> |
-            <a href="dashboard.html">Dashboard</a> |
-            <a href="leaderboard.html">Leaderboard</a> |
-            <a href="statistic.html">Statistic</a> |
-            <a href="profile.html">Profile</a> |
-            <a href="setting.html">Settings</a>
-        </nav>
-    </header>
-    </header>
-    <div id="trainingStatus" style="text-align:center; margin: 20px 0; font-weight:bold;"></div>
-    <h1>Dashboard</h1>
-<h2 id="addTrainingHeadline" style="cursor:pointer;">Add Training</h2>
-<div id="addTrainingFormContainer">
-    <label for="trainingTitle">Title:</label>
-    <input type="text" id="trainingTitle" name="trainingTitle" placeholder= "Morning run" required />
-    <br />
-    <label for="trainingDate">Date:</label>
-    <input type="date" id="trainingDate" name="trainingDate" required />
-    <br />
-     <label for="trainingType">Type:</label>
-    <select id="trainingType" name="trainingType">
-        <option value="running">Running</option>
-        <option value="cycling">Cycling</option>
-        <option value="swimming">Swimming</option>
-        <option value="strength">Strength Training</option>
-        <option value="other">Other</option>
-    </select>
-    <br />
+  <header>
+    <div class="grit-logo">
+      <img src="image/logo.jpg" alt="GRIT Logo" class="grit-logo-img" />
+    </div>
+    <nav>
+      <a href="index.html">Home</a> |
+      <a href="dashboard.html">Dashboard</a> |
+      <a href="leaderboard.html">Leaderboard</a> |
+      <a href="statistic.html">Statistics</a> |
+      <a href="profile.html">Profile</a> |
+      <a href="setting.html">Settings</a>
+    </nav>
+  </header>
 
+  <main class="main-section">
+    <h1>Welcome to <span style="color: var(--grit-red)">GRIT</span></h1>
+    <p class="tagline">Train smart. Build consistency. Earn your GRIT.</p>
 
+    <section>
+      <h2>🚀 What is GRIT?</h2>
+      <p><strong>GRIT</strong> is your personal training tracker that rewards effort, balance, and discipline — not just volume. From endurance athletes to everyday grinders, GRIT helps you stay consistent and sharp.</p>
+    </section>
 
-    <label for="intervalDuration">Duration (hh:mm:ss):</label>
-<input type="text" id="intervalDuration" name="intervalDuration" placeholder="00:45:30" pattern="^([0-9]{1,2}):([0-5][0-9]):([0-5][0-9])$" required />
-    <br />
-    <label for="intervalDistance">Distance (km):</label>
-    <input type="number" id="intervalDistance" name="intervalDistance" placeholder="7.65 km" step="0.01" min="0" required />
-    <br />
-    <label for="intervalHRavg">Average Heartrate:</label>
-    <input type="number" id="intervalHRavg" name="intervalHRavg" placeholder="142 bpm" min="0" max="220" required />
-    <br />
-    <label for="intervalRPE">RPE (1/10):</label>
-    <input type="number" id="intervalRPE" name="intervalRPE" placeholder="6" min="1" max="10" required />
-    <br />
-    <button id="addIntervalButton">Add Interval</button>
-    <button id="saveTraining">Save Training</button>
-    <br />
-</div>
+    <section>
+      <h2>🔥 Key Features</h2>
+      <ul>
+        <li><b>Personal Dashboard:</b> Log every training session with duration, intensity, HR, RPE and more.</li>
+        <li><b>GRIT Points:</b> Earn points by training consistently and with purpose.</li>
+        <li><b>Fatigue Penalty:</b> Overtrain? Your score drops. We reward smart athletes, not just grinders.</li>
+        <li><b>Leaderboard:</b> Compete with your friends. See who’s putting in the work, day after day.</li>
+        <li><b>Streak Tracking:</b> Daily, weekly, or monthly — track and beat your personal records.</li>
+        <li><b>Strava Integration:</b> Connect and sync your workouts in one click.</li>
+      </ul>
+    </section>
 
-    <div id="lastTrainings"></div> 
+    <section>
+      <h2>🌍 Why Athletes Choose GRIT</h2>
+      <p>Whether you're a skier, runner, cyclist, or lifter — GRIT makes your progress visible. It pushes you to show up, but never forgets that recovery is part of the game.</p>
+      <p>Backed by a smart fatigue-adjusted scoring system, GRIT helps you find your rhythm and maintain it over time.</p>
+    </section>
 
-<script type="module" src="dashboard.js"></script>
-<script type="module">
+    <section>
+      <h2>⚡ Ready to Start?</h2>
+      <a href="#authSection">
+        <button>Join Now — It’s Free</button>
+      </a>
+      <p>Already have an account? <a href="#authSection" style="color: var(--grit-blue); font-weight: bold;">Log In</a></p>
+    </section>
+  </main>
 
-</script>
-
+  <footer>
+    <div class="footer-content">
+      &copy; 2025 GRIT — Track your progress. Stay motivated. Earn your edge.
+    </div>
+  </footer>
 </body>
-<footer>
-        <div class="footer-content">
-            &copy; 2025 GRIT &mdash; Track your progress. Stay motivated.
-        </div>
-    </footer>
 </html>

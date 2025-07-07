@@ -368,8 +368,8 @@ saveTrainingButton.addEventListener('click', async function () {
         title: document.getElementById('trainingTitle').value,
         date: document.getElementById('trainingDate').value,
         type: document.getElementById('trainingType').value,
-        duration: totalDuration,
-        distance: totalDistance,
+        duration: totalDuration.toFixed(2), // total duration in minutes
+        distance: totalDistance.toFixed(2), // total distance in km
         hrAvg: avgHr,
         intervals: intervals,
         createdAt: new Date().toISOString(),
