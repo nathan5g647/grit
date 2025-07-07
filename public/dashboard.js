@@ -214,13 +214,22 @@ async function fetchTodaysStravaActivities(accessToken) {
     const endOfDay = startOfDay + 86400;
 
     const url = `https://www.strava.com/api/v3/athlete/activities?after=${startOfDay}&before=${endOfDay}&per_page=10`;
-    const response = await fetch(url, {
-        headers: {
-            'Authorization': `Bearer ${accessToken}`
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+        if (!response.ok) {
+            const text = await response.text();
+            console.error('Strava fetch failed:', response.status, text);
+            throw new Error('Failed to fetch Strava activities: ' + response.status);
         }
-    });
-    if (!response.ok) throw new Error('Failed to fetch Strava activities');
-    return await response.json();
+        return await response.json();
+    } catch (err) {
+        console.error('Strava fetch error:', err);
+        throw err;
+    }
 }
 
 async function refreshStravaAccessToken(refreshToken) {
