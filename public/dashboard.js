@@ -1,5 +1,5 @@
 import { auth, db } from './script.js';
-import { doc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, setDoc, where } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+import { doc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, setDoc, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
 let selectedTrainingIndex = null;
 let trainingsCache = [];
@@ -134,6 +134,7 @@ function showTrainingDetails(training) {
       });
       html += `</ul>`;
     }
+   
 
     detailsDiv.innerHTML = html;
     const btn = document.getElementById('closeTrainingDetails');
@@ -289,65 +290,50 @@ async function checkAndFetchTodaysTraining(user) {
     try {
         const activities = await fetchTodaysStravaActivities(accessToken);
         if (activities.length) {
-            let didRefresh = false;
+          let didRefresh = false;
 
-            for (const act of activities) {
-                const trainingId  = 'strava_' + act.id;
-                const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
-                const snap        = await getDoc(trainingRef);
+          for (const act of activities) {
+            const trainingId  = 'strava_' + act.id;
+            const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
+            const snap        = await getDoc(trainingRef);
+            let isNew         = false;
 
-                if (!snap.exists()) {
-                    // Prepare values in the same format as manual trainings
-                    const duration = act.moving_time ? secondsToHHMMSS(act.moving_time) : "00:00:00";
-                    const distance = act.distance ? (act.distance / 1000).toFixed(2) : "0.00";
-                    const hrAvg    = act.average_heartrate ? act.average_heartrate.toString() : "";
-                    const maxHr    = parseFloat(act.max_heartrate) || 190;
-                    const restHr   = 60;
-                    const HRr      = (parseFloat(hrAvg) - restHr) / (maxHr - restHr);
-                    const trimp    = ((act.moving_time || 0) / 60) * HRr * 0.64 * Math.exp(1.92 * HRr);
+            if (!snap.exists()) {
+              // extract & rename fields to match manual schema
+              const duration = act.moving_time ? act.moving_time/60 : 0;
+              const distance = act.distance    ? act.distance/1000 : 0;
+              const climb    = act.total_elevation_gain || 0;
+              const hrAvg    = act.average_heartrate        || 0;
+              // TRIMP
+              const maxHr = parseFloat(act.max_heartrate)||190;
+              const restHr = 60;
+              const HRr = (hrAvg - restHr)/(maxHr - restHr);
+              const trimp = duration * HRr * 0.64 * Math.exp(1.92*HRr);
 
-                    const intervals = [{
-                        duration: duration,
-                        distance: distance,
-                        hrAvg: hrAvg,
-                        rpe: "",
-                        trimp: trimp
-                    }];
-
-                    const data = {
-                        title:     act.name,
-                        date:      (act.start_date_local||'').slice(0,10),
-                        type:      (act.type||'other').toLowerCase(),
-                        intervals: intervals,
-                        trimp:     trimp,
-                        gritScore: 0,
-                        source:    'strava',
-                        stravaId:  act.id,
-                        createdAt: new Date().toISOString()
-                    };
-                    await setDoc(trainingRef, data);
-
-                    // Calculate and update gritScore
-                    const streak = await getStreak(user);
-                    const { avg: a7 } = await getTrainingsForPeriod(user, 7);
-                    const { avg: a28 } = await getTrainingsForPeriod(user, 28);
-                    const newGrit = calcGRIT({
-                        trimp: data.trimp,
-                        streak,
-                        trimpAvg7: a7,
-                        trimpAvg28: a28
-                    });
-                    await setDoc(trainingRef, { gritScore: newGrit }, { merge: true });
-                    didRefresh = true;
-                }
+              const data = {
+                title:     act.name,
+                date:      (act.start_date_local||'').slice(0,10),
+                type:      (act.type||'other').toLowerCase(),
+                intervals: [],
+               
+                duration, distance, climb, hrAvg,
+                trimp, gritScore:0,
+                source:'strava', stravaId:act.id,
+                createdAt:new Date().toISOString()
+              };
+              await setDoc(trainingRef, data);
+              isNew = true;
             }
 
-            if (didRefresh) {
-                trainingsCache = [];
-                await displayLastTrainings();
-            }
 
-            if (statusDiv) statusDiv.textContent = "Today's Strava training loaded!";
+          }
+
+          if (didRefresh) {
+            trainingsCache = [];
+            await displayLastTrainings();
+          }
+
+          if (statusDiv) statusDiv.textContent = "Today's Strava training loaded!";
         } else {
             if (statusDiv) statusDiv.textContent = "No Strava training found for today.";
         }
@@ -520,6 +506,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             // RPE
             totalRpe += parseFloat(interval.rpe) || 0;
         });
+
+        
+       
 
         const avgHr = intervals.length ? (totalHr / intervals.length).toFixed(1) : '0';
         const avgRpe = intervals.length ? (totalRpe / intervals.length).toFixed(1) : '0';
@@ -950,7 +939,60 @@ async function updateGritScores(userId, newScores) {
     }
 }
 
+// Assume activities is your array of Strava activities
+for (const activity of activities) {
+    const trainingId = "strava_" + activity.id;
+    const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
+    const trainingSnap = await getDoc(trainingRef);
 
+    if (!trainingSnap.exists()) {
+        // Prepare values in the same format as manual trainings
+        const durationSec = activity.moving_time || 0;
+        const duration = secondsToHHMMSS(durationSec); // "hh:mm:ss"
+        const distance = (activity.distance ? (activity.distance / 1000).toFixed(2) : "0.00"); // string
+        const hrAvg = activity.average_heartrate ? activity.average_heartrate.toString() : ""; // string
+
+        // Calculate TRIMP
+        const maxHr = parseFloat(activity.max_heartrate) || 190;
+        const restHr = 60;
+        const HRr = (parseFloat(hrAvg) - restHr) / (maxHr - restHr);
+        const trimp = (durationSec / 60) * HRr * 0.64 * Math.exp(1.92 * HRr);
+
+        // Single interval with all data (NO root duration/distance/hrAvg)
+        const intervals = [{
+            duration: duration,      // "hh:mm:ss"
+            distance: distance,      // string, km
+            hrAvg: hrAvg,            // string
+            rpe: "",                 // unknown from Strava
+            // Optionally, you can add trimp here if you want to match manual
+            trimp: trimp
+        }];
+
+        const trainingData = {
+            createdAt: new Date().toISOString(),
+            date: (activity.start_date_local || '').slice(0, 10),
+            gritScore: 0, // will be updated after calculation
+            intervals: intervals,
+            title: activity.name,
+            trimp: trimp,
+            type: (activity.type || 'other').toLowerCase()
+            // No extra fields!
+        };
+        await setDoc(trainingRef, trainingData);
+
+        // Calculate and update gritScore
+        const streak = await getStreak(user);
+        const { avg: a7 } = await getTrainingsForPeriod(user, 7);
+        const { avg: a28 } = await getTrainingsForPeriod(user, 28);
+        const newGrit = calcGRIT({
+            trimp: trainingData.trimp,
+            streak,
+            trimpAvg7: a7,
+            trimpAvg28: a28
+        });
+        await setDoc(trainingRef, { gritScore: newGrit }, { merge: true });
+    }
+}
 
 function secondsToHHMMSS(seconds) {
     const h = Math.floor(seconds / 3600);
