@@ -954,59 +954,7 @@ async function updateGritScores(userId, newScores) {
     }
 }
 
-// Assume activities is your array of Strava activities
-for (const activity of activities) {
-    const trainingId = "strava_" + activity.id;
-    const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
-    const trainingSnap = await getDoc(trainingRef);
 
-    if (!trainingSnap.exists()) {
-        // Prepare values in the same format as manual trainings
-        const durationSec = activity.moving_time || 0;
-        const duration = secondsToHHMMSS(durationSec); // "hh:mm:ss"
-        const distance = (activity.distance ? (activity.distance / 1000).toFixed(2) : "0.00"); // string
-        const hrAvg = activity.average_heartrate ? activity.average_heartrate.toString() : ""; // string
-
-        // Calculate TRIMP
-        const maxHr = parseFloat(activity.max_heartrate) || 190;
-        const restHr = 60;
-        const HRr = (parseFloat(hrAvg) - restHr) / (maxHr - restHr);
-        const trimp = (durationSec / 60) * HRr * 0.64 * Math.exp(1.92 * HRr);
-
-        // Single interval with all data (NO root duration/distance/hrAvg)
-        const intervals = [{
-            duration: duration,      // "hh:mm:ss"
-            distance: distance,      // string, km
-            hrAvg: hrAvg,            // string
-            rpe: "",                 // unknown from Strava
-            trimp: trimp
-        }];
-
-        const trainingData = {
-            createdAt: new Date().toISOString(),
-            date: (activity.start_date_local || '').slice(0, 10),
-            gritScore: 0, // will be updated after calculation
-            intervals: intervals,
-            title: activity.name,
-            trimp: trimp,
-            type: (activity.type || 'other').toLowerCase()
-            // No extra fields!
-        };
-        await setDoc(trainingRef, trainingData);
-
-        // Calculate and update gritScore
-        const streak = await getStreak(user);
-        const { avg: a7 } = await getTrainingsForPeriod(user, 7);
-        const { avg: a28 } = await getTrainingsForPeriod(user, 28);
-        const newGrit = calcGRIT({
-            trimp: trainingData.trimp,
-            streak,
-            trimpAvg7: a7,
-            trimpAvg28: a28
-        });
-        await setDoc(trainingRef, { gritScore: newGrit }, { merge: true });
-    }
-}
 
 function secondsToHHMMSS(seconds) {
     const h = Math.floor(seconds / 3600);
