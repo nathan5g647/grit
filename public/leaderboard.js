@@ -237,9 +237,7 @@ function sumGritForPeriod(trainings, period) {
     trainings.forEach(t => {
         const dateStr = t.date || t.createdAt;
         const d = parseLocalDate(dateStr);
-        if (period === "week") {
-            console.log("Training date:", d, "Period start:", periodStart, "In week?", d >= periodStart, "Grit:", t.gritScore);
-        }
+       
     });
     return trainings
         .filter(t => {

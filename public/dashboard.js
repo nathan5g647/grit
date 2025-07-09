@@ -1,5 +1,5 @@
 import { auth, db } from './script.js';
-import { doc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, setDoc, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+import { doc, getDoc, collection, addDoc, query, orderBy, getDocs, setDoc, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
 let selectedTrainingIndex = null;
 let trainingsCache = [];
@@ -8,11 +8,28 @@ const trainingsPerPage = 10;
 
 // --- GLOBAL FUNCTIONS ---
 
+function calcGRIT({ trimp, streak, trimpAvg7, trimpAvg28 }) {
+    const safeTrimpAvg28 = trimpAvg28 && trimpAvg28 > 0 ? trimpAvg28 : trimp;
+    const safeTrimpAvg7 = trimpAvg7 && trimpAvg7 > 0 ? trimpAvg7 : trimp;
+    return (
+        0.222 * trimp +
+        0.07 * streak -
+        0.9 * (safeTrimpAvg7 / safeTrimpAvg28)
+    );
+}
+
+function updateGritScoreDisplay(score) {
+    const gritDiv = document.getElementById('gritScore');
+    if (gritDiv) {
+        gritDiv.innerHTML = `<strong>GRIT Score:</strong> ${typeof score === 'number' ? score.toFixed(2) : (score || 'N/A')}`;
+    }
+}
+
 async function fetchAllTrainings() {
     const user = auth.currentUser;
     if (!user) return [];
     const trainingsRef = collection(db, "users", user.uid, "trainings");
-    const q = query(trainingsRef, orderBy("createdAt", "desc"));
+    const q = query(trainingsRef, orderBy("date", "desc"));
     const querySnapshot = await getDocs(q);
     const trainings = [];
     querySnapshot.forEach(docSnap => {
@@ -35,7 +52,6 @@ function renderTrainingsPage(trainings, page) {
             html += `<li class="training-item" data-index="${i}" style="cursor:pointer;">
                 <strong>${t.title || 'No title'}</strong> (${t.date || 'No date'})<br>
                 Type: ${t.type || ''}<br>
-                Intervals: ${t.intervals ? t.intervals.length : 0}
             </li>`;
         }
         html += "</ul>";
@@ -93,57 +109,62 @@ async function displayLastTrainings() {
 function showTrainingDetails(training) {
     const detailsDiv = document.getElementById('trainingDetails');
     if (!detailsDiv || !training) return;
-
-    const disp = (key, unit = '') =>
-      training[key] !== undefined
-        ? (typeof training[key] === 'number'
-            ? parseFloat(training[key]).toFixed(2)
-            : training[key]) + unit
-        : '—';
-
     let html = `
-      <div style="display:flex;justify-content:center;align-items:center;position:relative;margin-bottom:10px;">
-        <h4 style="margin:0;flex:1;text-align:center;">Training Details</h4>
-        <button id="closeTrainingDetails" style="
-          background:#BF1A2F;color:#fff;border:none;border-radius:4px;
-          padding:6px 16px;cursor:pointer;margin-right:20px;
-          position:absolute;right:0;top:50%;transform:translateY(-50%);
-        ">Close</button>
-      </div>
-      <div style="text-align:center;">
-        <strong>Title:</strong> ${training.title || '—'}<br>
-        <strong>Date:</strong> ${training.date || '—'}<br>
-        <strong>Type:</strong> ${training.type || '—'}<br>
-        <strong>Duration:</strong> ${disp('duration',' min')}<br>
-        <strong>Distance:</strong> ${disp('distance',' km')}<br>
-        <strong>Climb:</strong> ${disp('climb',' m')}<br>
-        <strong>Avg HR:</strong> ${disp('hrAvg',' bpm')}<br>
-        <strong>TRIMP:</strong> ${disp('trimp')}<br>
-        <strong>GRIT:</strong> ${disp('gritScore')}<br>
-      </div>
+        <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 10px; position: relative;">
+            <h4 style="margin: 0; flex: 1; text-align: center;">Training Details</h4>
+            <button id="closeTrainingDetails" 
+                style="
+                    background:#BF1A2F;
+                    color:white;
+                    border:none;
+                    border-radius:4px;
+                    padding:6px 16px;
+                    cursor:pointer;
+                    font-weight:bold;
+                    font-size:1em;
+                    margin-right: 20px;
+                    position: absolute;
+                    right: 0;
+                    top: 50%;
+                    transform: translateY(-50%);
+                ">
+                Close
+            </button>
+        </div>
     `;
-
-    // manual intervals
-    if (training.intervals?.length) {
-      html += `<strong>Intervals:</strong><ul>`;
-      training.intervals.forEach((i, idx) => {
-        html += `<li>Interval ${idx+1}: ${i.duration}, ${i.distance} km, HR ${i.hrAvg}, RPE ${i.rpe}</li>`;
-      });
-      html += `</ul>`;
+    html += `<div style="text-align:center;">`;
+    html += `<strong>Title:</strong> ${training.title || ''}<br>`;
+    html += `<strong>Date:</strong> ${training.date || ''}<br>`;
+    html += `<strong>Type:</strong> ${training.type || ''}<br>`;
+    html += `<strong>Total Duration:</strong> ${typeof training.duration === 'number' ? training.duration.toFixed(2) + ' min' : 'N/A'}<br>`;
+    html += `<strong>Total Distance:</strong> ${typeof training.distance === 'number' ? training.distance.toFixed(2) + ' km' : 'N/A'}<br>`;
+    html += `<strong>Total Climb:</strong> ${typeof training.totalClimb === 'number' ? training.totalClimb + ' m' : 'N/A'}<br>`;
+    html += `<strong>Avg Heartrate:</strong> ${typeof training.hrAvg === 'number' ? training.hrAvg + ' bpm' : 'N/A'}<br>`;
+    html += `<strong>Total TRIMP:</strong> ${typeof training.trimp === 'number' ? training.trimp.toFixed(2) : 'N/A'}<br>`;
+    html += `<strong>GRIT Score:</strong> ${typeof training.gritScore === 'number' ? training.gritScore.toFixed(2) : (training.gritScore || 'N/A')}<br>`;
+    if (training.intervals && training.intervals.length > 0) {
+        html += `<strong>Intervals:</strong><ul style="display:inline-block; text-align:left;">`;
+        training.intervals.forEach((interval, i) => {
+            html += `<li>
+                <strong>Interval ${i + 1}:</strong>
+                Duration: ${interval.duration || 'N/A'}, 
+                Distance: ${interval.distance || 'N/A'} km, 
+                HR Avg: ${interval.hrAvg || 'N/A'}, 
+                RPE: ${interval.rpe || 'N/A'}
+            </li>`;
+        });
+        html += `</ul>`;
     }
-
-    
-
-    // render
+    html += `</div>`;
     detailsDiv.innerHTML = html;
 
-    // close button logic
-    const btn = document.getElementById('closeTrainingDetails');
-    if (btn) {
-      btn.onclick = () => {
-        detailsDiv.innerHTML = '';
-        selectedTrainingIndex = null;
-      };
+    // Add close button logic
+    const closeBtn = document.getElementById('closeTrainingDetails');
+    if (closeBtn) {
+        closeBtn.onclick = function() {
+            detailsDiv.innerHTML = '';
+            selectedTrainingIndex = null;
+        };
     }
 }
 
@@ -158,7 +179,6 @@ function addTrainingsNavListeners() {
                 currentPage--;
                 lastTrainingsDiv.innerHTML = renderTrainingsPage(trainingsCache, currentPage);
                 addTrainingsNavListeners();
-                // Restore details if selected training is on this page
                 if (
                     selectedTrainingIndex !== null &&
                     selectedTrainingIndex >= currentPage * trainingsPerPage &&
@@ -168,7 +188,6 @@ function addTrainingsNavListeners() {
                 } else {
                     document.getElementById('trainingDetails').innerHTML = '';
                 }
-                // Re-add click listeners for training items
                 document.querySelectorAll('.training-item').forEach(item => {
                     item.addEventListener('click', function () {
                         const idx = parseInt(this.getAttribute('data-index'));
@@ -185,7 +204,6 @@ function addTrainingsNavListeners() {
                 currentPage++;
                 lastTrainingsDiv.innerHTML = renderTrainingsPage(trainingsCache, currentPage);
                 addTrainingsNavListeners();
-                // Restore details if selected training is on this page
                 if (
                     selectedTrainingIndex !== null &&
                     selectedTrainingIndex >= currentPage * trainingsPerPage &&
@@ -195,7 +213,6 @@ function addTrainingsNavListeners() {
                 } else {
                     document.getElementById('trainingDetails').innerHTML = '';
                 }
-                // Re-add click listeners for training items
                 document.querySelectorAll('.training-item').forEach(item => {
                     item.addEventListener('click', function () {
                         const idx = parseInt(this.getAttribute('data-index'));
@@ -215,176 +232,19 @@ function getTodayDateString() {
 }
 
 // Fetch today's activities from Strava
-async function checkAndFetchLast7DaysStravaTrainings(user) {
-    const statusDiv = document.getElementById('trainingStatus');
-    if (statusDiv) statusDiv.textContent = "Checking Strava trainings (last 7 days)...";
-
-    // 1. Get Strava access token
-    const stravaDocRef = doc(db, "users", user.uid, "strava", "connection");
-    const stravaDoc = await getDoc(stravaDocRef);
-    if (!stravaDoc.exists() || !stravaDoc.data().connected) {
-        if (statusDiv) statusDiv.textContent = "No Strava training loaded (not connected).";
-        return;
-    }
-    let accessToken = stravaDoc.data().accessToken;
-    let refreshToken = stravaDoc.data().refreshToken;
-    let expiresAt = stravaDoc.data().expiresAt;
-
-    // Check if token is expired
-    if (expiresAt && Date.now() / 1000 > expiresAt) {
-        try {
-            const tokenData = await refreshStravaAccessToken(refreshToken);
-            accessToken = tokenData.access_token;
-            refreshToken = tokenData.refresh_token;
-            expiresAt = tokenData.expires_at;
-            await setDoc(stravaDocRef, {
-                accessToken,
-                refreshToken,
-                expiresAt
-            }, { merge: true });
-        } catch (err) {
-            if (statusDiv) statusDiv.textContent = "Failed to refresh Strava token.";
-            return;
+async function fetchTodaysStravaActivities(accessToken) {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() / 1000;
+    const endOfDay = startOfDay + 86400;
+    const url = `https://www.strava.com/api/v3/athlete/activities?after=${startOfDay}&before=${endOfDay}&per_page=10`;
+    const response = await fetch(url, {
+        headers: {
+            'Authorization': `Bearer ${accessToken}`
         }
-    }
-
-    // 2. Fetch last 7 days' activities from Strava
-    try {
-        const now = new Date();
-        const startOf7Days = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0);
-        const after = Math.floor(startOf7Days.getTime() / 1000);
-        const before = Math.floor(now.getTime() / 1000) + 86400; // include today
-        const url = `https://www.strava.com/api/v3/athlete/activities?after=${after}&before=${before}&per_page=50`;
-        const response = await fetch(url, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`
-            }
-        });
-        if (!response.ok) throw new Error('Failed to fetch Strava activities');
-        const activities = await response.json();
-
-        if (activities.length) {
-            let didRefresh = false;
-            for (const act of activities) {
-                const trainingId = 'strava_' + act.id;
-                const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
-                const snap = await getDoc(trainingRef);
-
-                if (!snap.exists()) {
-                    // Save Strava activity in manual format (root fields, not intervals)
-                    const duration = act.elapsed_time ? act.elapsed_time / 60 : 0;
-                    const distance = act.distance ? act.distance / 1000 : 0;
-                    const climb = act.total_elevation_gain || 0;
-                    const hrAvg = act.average_heartrate || 0;
-                    const maxHr = parseFloat(act.max_heartrate) || 190;
-                    const restHr = 60;
-                    const HRr = (hrAvg - restHr) / (maxHr - restHr);
-                    const trimp = duration * HRr * 0.64 * Math.exp(1.92 * HRr);
-
-                    const data = {
-                        title: act.name,
-                        date: (act.start_date_local || '').slice(0, 10),
-                        type: (act.type || 'other').toLowerCase(),
-                        duration: duration,
-                        distance: distance,
-                        climb: climb,
-                        hrAvg: hrAvg,
-                        trimp: trimp,
-                        gritScore: 0,
-                        source: 'strava',
-                        stravaId: act.id,
-                        createdAt: new Date().toISOString()
-                    };
-                    await setDoc(trainingRef, data);
-                    didRefresh = true;
-                }
-            }
-            if (didRefresh) {
-                trainingsCache = [];
-                await displayLastTrainings();
-            }
-            if (statusDiv) statusDiv.textContent = "Strava trainings loaded (last 7 days)!";
-        } else {
-            if (statusDiv) statusDiv.textContent = "No Strava training found for last 7 days.";
-        }
-    } catch (err) {
-        if (statusDiv) statusDiv.textContent = "Error fetching Strava training.";
-    }
-
-    toggleAddTrainingForm();
-}
-
-// --- Replace your old checkAndFetchTodaysTraining call with this in your auth.onAuthStateChanged or DOMContentLoaded:
-auth.onAuthStateChanged(async (user) => {
-    if (user) {
-        await checkAndFetchLast7DaysStravaTrainings(user);
-        await toggleAddTrainingForm();
-        await displayLastTrainings();
-        await displayAllTimeGritScore();
-        await displayCurrentStreak();
-    }
-});
-
-// --- When saving manual training, save data at the root, not in intervals:
-saveTrainingButton.addEventListener('click', async function () {
-    if (!validateTrainingInputs()) {
-        showMessage('Please fill in all required training fields before saving.', 'red');
-        return;
-    }
-    if (intervals.length === 0) {
-        showMessage('Please add at least one interval before saving the training.', 'red');
-        return;
-    }
-
-    const user = auth.currentUser;
-    if (!user) {
-        showMessage('You must be logged in to save training.', 'red');
-        return;
-    }
-
-    // Calculate totals from intervals
-    let totalDistance = 0, totalDuration = 0, totalHr = 0;
-    intervals.forEach(interval => {
-        totalDistance += parseFloat(interval.distance) || 0;
-        // Duration (convert from HH:MM:SS or MM:SS to minutes)
-        let parts = interval.duration.split(':').map(Number);
-        let minutes = 0;
-        if (parts.length === 3) {
-            minutes = parts[0] * 60 + parts[1] + parts[2] / 60;
-        } else if (parts.length === 2) {
-            minutes = parts[0] + parts[1] / 60;
-        } else if (parts.length === 1) {
-            minutes = parts[0];
-        }
-        totalDuration += minutes;
-        totalHr += parseFloat(interval.hrAvg) || 0;
     });
-    const avgHr = intervals.length ? (totalHr / intervals.length).toFixed(1) : '0';
-    const totalTRIMP = calcTRIMP(intervals, maxHr, restHr, lambda);
-    const streak = await getStreak(user);
-
-    // Save manual training with root fields
-    const trainingData = {
-        title: document.getElementById('trainingTitle').value,
-        date: document.getElementById('trainingDate').value,
-        type: document.getElementById('trainingType').value,
-        duration: totalDuration.toFixed(2), // total duration in minutes
-        distance: totalDistance.toFixed(2), // total distance in km
-        hrAvg: avgHr,
-        intervals: intervals,
-        createdAt: new Date().toISOString(),
-        trimp: totalTRIMP,
-        gritScore: 0 // temporary, will update after
-    };
-
-    try {
-        const trainingsRef = collection(db, "users", user.uid, "trainings");
-        const docRef = await addDoc(trainingsRef, trainingData);
-        // ...rest of your logic unchanged...
-    } catch (error) {
-        showMessage('Error saving training: ' + error.message, 'red');
-    }
-});
+    if (!response.ok) throw new Error('Failed to fetch Strava activities');
+    return await response.json();
+}
 
 async function refreshStravaAccessToken(refreshToken) {
     const client_id = '164917';
@@ -414,6 +274,45 @@ async function checkAndFetchTodaysTraining(user) {
     const querySnapshot = await getDocs(q);
 
     if (!querySnapshot.empty) {
+        // Even if today's training exists, update its GRIT score!
+        const user = auth.currentUser;
+        const trainingsRef = collection(db, "users", user.uid, "trainings");
+        const allTrainingsSnap = await getDocs(query(trainingsRef, orderBy("date", "desc")));
+        let trimp7 = 0, trimp28 = 0, count7 = 0, count28 = 0;
+        const now = new Date();
+        let lastTraining = null;
+        allTrainingsSnap.forEach(docSnap => {
+            const t = docSnap.data();
+            if (t.trimp && t.date) {
+                const trainDate = parseLocalDate(t.date);
+                const daysAgo = (now - trainDate) / (1000 * 60 * 60 * 24);
+                if (daysAgo <= 7) {
+                    trimp7 += t.trimp;
+                    count7++;
+                }
+                if (daysAgo <= 28) {
+                    trimp28 += t.trimp;
+                    count28++;
+                }
+                // Find the most recent training (today's)
+                if (!lastTraining && t.date === getTodayDateString()) {
+                    lastTraining = { ...t, id: docSnap.id };
+                }
+            }
+        });
+        if (lastTraining) {
+            const avgTrimp7 = count7 ? trimp7 / count7 : lastTraining.trimp;
+            const avgTrimp28 = count28 ? trimp28 / count28 : lastTraining.trimp;
+            const streak = await getStreak(user);
+            const gritScore = calcGRIT({
+                trimp: lastTraining.trimp,
+                streak: streak,
+                trimpAvg7: avgTrimp7,
+                trimpAvg28: avgTrimp28
+            });
+            await setDoc(doc(trainingsRef, lastTraining.id), { gritScore }, { merge: true });
+            console.log('GRIT DEBUG (existing training)', { trimp: lastTraining.trimp, streak, avgTrimp7, avgTrimp28, gritScore });
+        }
         if (statusDiv) statusDiv.textContent = "Today's training is loaded.";
         return;
     }
@@ -436,7 +335,6 @@ async function checkAndFetchTodaysTraining(user) {
             accessToken = tokenData.access_token;
             refreshToken = tokenData.refresh_token;
             expiresAt = tokenData.expires_at;
-            // Save new tokens to Firestore
             await setDoc(stravaDocRef, {
                 accessToken,
                 refreshToken,
@@ -451,62 +349,78 @@ async function checkAndFetchTodaysTraining(user) {
     // 3. Fetch today's activities from Strava
     try {
         const activities = await fetchTodaysStravaActivities(accessToken);
-        if (activities.length) {
-          let didRefresh = false;
+        if (activities.length > 0) {
+            for (const activity of activities) {
+                const trainingId = "strava_" + activity.id;
+                const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
+                const trainingSnap = await getDoc(trainingRef);
 
-          for (const act of activities) {
-            const trainingId  = 'strava_' + act.id;
-            const trainingRef = doc(db, "users", user.uid, "trainings", trainingId);
-            const snap        = await getDoc(trainingRef);
-            let isNew         = false;
+                // Always extract values (for both new and existing)
+                const duration = Number.isFinite(activity.elapsed_time) ? activity.elapsed_time / 60 : 0; // minutes
+                const distance = Number.isFinite(activity.distance) ? activity.distance / 1000 : 0; // km
+                const totalClimb = Number.isFinite(activity.total_elevation_gain) ? activity.total_elevation_gain : 0;
+                const hrAvg = Number.isFinite(activity.average_heartrate) ? activity.average_heartrate : 0;
+                const maxHr = parseFloat(activity.max_heartrate) || 190;
+                const restHr = 60;
+                const lambda = 1.92;
+                const HRr = maxHr && restHr ? (hrAvg - restHr) / (maxHr - restHr) : 0;
+                const trimp = duration * HRr * 0.64 * Math.exp(lambda * HRr);
 
-            if (!snap.exists()) {
-              // extract & rename fields to match manual schema
-              const duration = act.elapsed_time ? act.elapsed_time/60 : 0;
-              const distance = act.distance    ? act.distance/1000 : 0;
-              const climb    = act.total_elevation_gain || 0;
-              const hrAvg    = act.average_heartrate        || 0;
-              // TRIMP
-              const maxHr = parseFloat(act.max_heartrate)||190;
-              const restHr = 60;
-              const HRr = (hrAvg - restHr)/(maxHr - restHr);
-              const trimp = duration * HRr * 0.64 * Math.exp(1.92*HRr);
+                if (!trainingSnap.exists()) {
+                    // Save new Strava training
+                    const trainingData = {
+                        title: activity.name,
+                        date: activity.start_date_local ? activity.start_date_local.slice(0, 10) : "",
+                        type: activity.type ? activity.type.toLowerCase() : "other",
+                        intervals: [],
+                        trimp: trimp || 0,
+                        gritScore: 0,
+                        source: "strava",
+                        stravaId: activity.id,
+                        createdAt: new Date().toISOString(),
+                        duration,
+                        distance,
+                        totalClimb,
+                        hrAvg
+                    };
+                    await setDoc(trainingRef, trainingData);
+                }
 
-              const data = {
-                title:     act.name,
-                date:      (act.start_date_local||'').slice(0,10),
-                type:      (act.type||'other').toLowerCase(),
-                intervals: [{
-                  distance: distance,
-                  climb: climb,
-                  hrAvg: hrAvg,
-                  duration: mintudestoHHMMSS(duration),
-                }],
-                trimp, gritScore,
-                source:'strava', stravaId:act.id,
-                createdAt:new Date().toISOString()
-              };
-              await setDoc(trainingRef, data);
-              isNew = true;
+                // Always recalculate and update gritScore
+                const allTrainingsSnap = await getDocs(query(trainingsRef, orderBy("date", "desc")));
+                let trimp7 = 0, trimp28 = 0, count7 = 0, count28 = 0;
+                const now = new Date();
+                allTrainingsSnap.forEach(docSnap => {
+                    const t = docSnap.data();
+                    if (t.trimp && t.date) {
+                        const trainDate = parseLocalDate(t.date);
+                        const daysAgo = (now - trainDate) / (1000 * 60 * 60 * 24);
+                        if (daysAgo <= 7) {
+                            trimp7 += t.trimp;
+                            count7++;
+                        }
+                        if (daysAgo <= 28) {
+                            trimp28 += t.trimp;
+                            count28++;
+                        }
+                    }
+                });
+                // Fallback to current trimp if no trainings in window
+                const avgTrimp7 = count7 ? trimp7 / count7 : trimp;
+                const avgTrimp28 = count28 ? trimp28 / count28 : trimp;
+                const streak = await getStreak(user);
+                const gritScore = calcGRIT({
+                    trimp: trimp,
+                    streak: streak,
+                    trimpAvg7: avgTrimp7,
+                    trimpAvg28: avgTrimp28
+                });
+                console.log('GRIT DEBUG', { trimp, streak, avgTrimp7, avgTrimp28, gritScore });
+                await setDoc(trainingRef, { gritScore }, { merge: true });
             }
-          // Helper function to convert minutes to HH:MM:SS
-          function mintudestoHHMMSS(duration) {
-            const totalSeconds = Math.floor(duration * 60);
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-          }
-            const seconds = totalSeconds % 60;
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-          }
-
-          if (didRefresh) {
+            if (statusDiv) statusDiv.textContent = "Today's Strava training loaded!";
             trainingsCache = [];
             await displayLastTrainings();
-          }
-
-          if (statusDiv) statusDiv.textContent = "Today's Strava training loaded!";
         } else {
             if (statusDiv) statusDiv.textContent = "No Strava training found for today.";
         }
@@ -515,6 +429,15 @@ async function checkAndFetchTodaysTraining(user) {
     }
 
     toggleAddTrainingForm();
+}
+
+function formatMinutesToHHMMSS(minutesDecimal) {
+    const totalSeconds = Math.round(minutesDecimal * 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
 async function toggleAddTrainingForm() {
@@ -550,30 +473,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Store intervals in an array
     let intervals = [];
 
-    function getPeriodStart(period) {
-    const now = new Date();
-    if (period === 'week') {
-        // Set to most recent Monday
-        const day = now.getDay(); // 0 (Sun) - 6 (Sat)
-        const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is Sunday
-        const monday = new Date(now.setDate(diff));
-        monday.setHours(0, 0, 0, 0);
-        return monday;
-    }
-    if (period === 'month') {
-        const first = new Date(now.getFullYear(), now.getMonth(), 1);
-        first.setHours(0, 0, 0, 0);
-        return first;
-    }
-    if (period === 'year') {
-        const jan1 = new Date(now.getFullYear(), 0, 1);
-        jan1.setHours(0, 0, 0, 0);
-        return jan1;
-    }
-    // allTime: return a very old date
-    return new Date(2000, 0, 1);
-}
-
     // Create preview container
     const previewDiv = document.createElement('div');
     previewDiv.id = 'trainingPreview';
@@ -607,7 +506,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         updatePreview();
         displayLastTrainings();
         displayAllTimeGritScore();
-        displayCurrentStreak(); // <-- add this line
+        displayCurrentStreak();
     });
 
     function calcTRIMP(intervals, maxHr, restHr, lambda) {
@@ -634,7 +533,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function calcGRIT({ trimp, streak, trimpAvg7, trimpAvg28 }) {
-        if (!trimpAvg28 || trimpAvg28 === 0) return 0; // avoid division by zero
+        if (!trimpAvg28 || trimpAvg28 === 0) return 0;
         return (
             0.222 * trimp +
             0.07 * streak -
@@ -643,27 +542,23 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function updatePreview() {
-        // Only show preview if at least one interval exists
         if (intervals.length === 0) {
-            previewDiv.innerHTML = '';
             previewDiv.style.display = 'none';
             return;
         }
         previewDiv.style.display = 'block';
-        const title = document.getElementById('trainingTitle').value;
-        const date = document.getElementById('trainingDate').value;
+        const title = document.getElementById('trainingTitle')?.value || '';
+        const date = document.getElementById('trainingDate')?.value || '';
         const type = document.getElementById('trainingType') ? document.getElementById('trainingType').value : '';
 
         // Calculate totals and averages
         let totalDistance = 0;
-        let totalDuration = 0; // in seconds
+        let totalDuration = 0;
         let totalHr = 0;
         let totalRpe = 0;
 
         intervals.forEach(interval => {
-            // Distance
             totalDistance += parseFloat(interval.distance) || 0;
-            // Duration (convert from HH:MM:SS or MM:SS to seconds)
             let parts = interval.duration.split(':').map(Number);
             let seconds = 0;
             if (parts.length === 3) {
@@ -674,13 +569,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 seconds = parts[0];
             }
             totalDuration += seconds;
-            // HR
             totalHr += parseFloat(interval.hrAvg) || 0;
-            // RPE
             totalRpe += parseFloat(interval.rpe) || 0;
         });
 
-        // Format total duration as minutes with 2 decimals
         function formatDurationMinutes(sec) {
             return (sec / 60).toFixed(2) + ' min';
         }
@@ -705,9 +597,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         updateGritScoreDisplay(gritScore);
 
         let html = `<h3>Training Preview</h3>`;
-        html += `<strong>Title:</strong> ${title || ''}<br>`;
-        html += `<strong>Date:</strong> ${date || ''}<br>`;
-        html += `<strong>Type:</strong> ${type || ''}<br>`;
+        html += `<strong>Title:</strong> ${title}<br>`;
+        html += `<strong>Date:</strong> ${date}<br>`;
+        html += `<strong>Type:</strong> ${type}<br>`;
         html += `<strong>Total Distance:</strong> ${totalDistance.toFixed(2)} km<br>`;
         html += `<strong>Total Duration:</strong> ${formatDurationMinutes(totalDuration)}<br>`;
         html += `<strong>Avg Heartrate:</strong> ${avgHr} bpm<br>`;
@@ -843,80 +735,87 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
 
+        // Calculate totals for root fields
+        let totalDistance = 0, totalDuration = 0, totalClimb = 0, hrSum = 0;
+        intervals.forEach(i => {
+            totalDistance += parseFloat(i.distance) || 0;
+            let parts = i.duration.split(':').map(Number);
+            let minutes = 0;
+            if (parts.length === 3) {
+                minutes = parts[0] * 60 + parts[1] + parts[2] / 60;
+            } else if (parts.length === 2) {
+                minutes = parts[0] + parts[1] / 60;
+            } else if (parts.length === 1) {
+                minutes = parts[0];
+            }
+            totalDuration += minutes;
+            hrSum += parseFloat(i.hrAvg) || 0;
+        });
+        const avgHr = intervals.length > 0 ? hrSum / intervals.length : null;
         const totalTRIMP = calcTRIMP(intervals, maxHr, restHr, lambda);
         const streak = await getStreak(user);
+
+        const trainingsRef = collection(db, "users", user.uid, "trainings");
+        const allTrainingsSnap = await getDocs(query(trainingsRef, orderBy("date", "desc")));
+        let trimp7 = 0, trimp28 = 0, count7 = 0, count28 = 0;
+        const now = new Date();
+
+        allTrainingsSnap.forEach(docSnap => {
+            const t = docSnap.data();
+            if (t.trimp && t.date) {
+                const trainDate = parseLocalDate(t.date);
+                const daysAgo = (now - trainDate) / (1000 * 60 * 60 * 24);
+                if (daysAgo <= 7) {
+                    trimp7 += t.trimp;
+                    count7++;
+                }
+                if (daysAgo <= 28) {
+                    trimp28 += t.trimp;
+                    count28++;
+                }
+            }
+        });
+
+        const avgTrimp7 = count7 ? trimp7 / count7 : trimp;
+        const avgTrimp28 = count28 ? trimp28 / count28 : trimp;
+        const gritScore = calcGRIT({
+            trimp: totalTRIMP,
+            streak: streak,
+            trimpAvg7: avgTrimp7,
+            trimpAvg28: avgTrimp28
+        });
 
         const trainingData = {
             title: document.getElementById('trainingTitle').value,
             date: document.getElementById('trainingDate').value,
             type: document.getElementById('trainingType').value,
-            duration,
-            distance,
-            climb,
-            hrAvg,
             intervals: intervals,
             createdAt: new Date().toISOString(),
             trimp: totalTRIMP,
-            gritScore: 0 // temporary, will update after
+            duration: totalDuration,
+            distance: totalDistance,
+            totalClimb: totalClimb,
+            hrAvg: avgHr,
+            gritScore: gritScore
         };
 
         try {
-            const trainingsRef = collection(db, "users", user.uid, "trainings");
-            // 1. Add the training first
             const docRef = await addDoc(trainingsRef, trainingData);
-
-            // 2. Now recalculate averages including this training
-            // Fetch all trainings again (including the new one)
-            const allTrainingsSnap = await getDocs(query(trainingsRef, orderBy("date", "desc")));
-            let trimp7 = 0, trimp28 = 0, count7 = 0, count28 = 0;
-            const now = new Date();
-            allTrainingsSnap.forEach(docSnap => {
-                const t = docSnap.data();
-                if (t.trimp && t.date) {
-                    const trainDate = new Date(t.date);
-                    const daysAgo = (now - trainDate) / (1000 * 60 * 60 * 24);
-                    if (daysAgo <= 7) {
-                        trimp7 += t.trimp;
-                        count7++;
-                    }
-                    if (daysAgo <= 28) {
-                        trimp28 += t.trimp;
-                        count28++;
-                    }
-                }
-            });
-            const avgTrimp7 = count7 ? trimp7 / count7 : 0;
-            const avgTrimp28 = count28 ? trimp28 / count28 : 0;
-
-            const gritScore = calcGRIT({
-                trimp: totalTRIMP,
-                streak: streak,
-                trimpAvg7: avgTrimp7,
-                trimpAvg28: avgTrimp28
-            });
-
-            // 3. Update the training with the correct gritScore
-            await setDoc(docRef, { ...trainingData, gritScore }, { merge: true });
 
             showMessage('Training saved!');
             intervals = [];
             resetTrainingInputs();
             updatePreview();
             updateGritScoreDisplay(gritScore);
-            await refreshTrainingsAfterSave();
+            if (typeof refreshTrainingsAfterSave === 'function') await refreshTrainingsAfterSave();
 
-            // --- Calculate and update grit scores for all periods ---
-            async function getTrimpSum(days) {
-                const { trimpSum } = await getTrainingsForPeriod(user, days);
-                return trimpSum;
-            }
             const weekData = await getTrainingsForPeriod(user, 'week');
             const monthData = await getTrainingsForPeriod(user, 'month');
             const yearData = await getTrainingsForPeriod(user, 'year');
             const allTimeData = await getTrainingsForPeriod(user, 'allTime');
 
             const trimp7Period = weekData.avg;
-            const trimp28Period = monthData.avg; // or use a separate 28-day period if you want
+            const trimp28Period = monthData.avg;
 
             const weekGrit = calcGRIT({ trimp: weekData.trimpSum, streak, trimpAvg7: trimp7Period, trimpAvg28: trimp28Period });
             const monthGrit = calcGRIT({ trimp: monthData.trimpSum, streak, trimpAvg7: trimp7Period, trimpAvg28: trimp28Period });
@@ -941,9 +840,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     function getPeriodStart(period) {
         const now = new Date();
         if (period === 'week') {
-            // Set to most recent Monday
-            const day = now.getDay(); // 0 (Sun) - 6 (Sat)
-            const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is Sunday
+            const day = now.getDay();
+            const diff = now.getDate() - day + (day === 0 ? -6 : 1);
             return new Date(now.setDate(diff)).setHours(0,0,0,0);
         }
         if (period === 'month') {
@@ -952,7 +850,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (period === 'year') {
             return new Date(now.getFullYear(), 0, 1).setHours(0,0,0,0);
         }
-        // allTime: return a very old date
         return new Date(2000, 0, 1).setHours(0,0,0,0);
     }
 
@@ -974,37 +871,34 @@ document.addEventListener('DOMContentLoaded', async function () {
         return { trimpSum, count, avg: count ? trimpSum / count : 0 };
     }
 
-    async function getStreak(user) {
+    async function getStreak(user, upToDate = null) {
         const trainingsRef = collection(db, "users", user.uid, "trainings");
         const q = query(trainingsRef, orderBy("date", "desc"));
         const querySnapshot = await getDocs(q);
+
         let streak = 0;
         let prevDate = null;
         for (const docSnap of querySnapshot.docs) {
             const t = docSnap.data();
             if (!t.date) continue;
-            const trainDate = new Date(t.date);
+            const trainDate = new Date(t.date.toDate ? t.date.toDate() : t.date);
+            if (upToDate && trainDate > new Date(upToDate)) continue;
             if (!prevDate) {
                 prevDate = trainDate;
                 streak = 1;
             } else {
-                const diff = (prevDate - trainDate) / (1000 * 60 * 60 * 24);
-                if (diff <= 1.5) {
+                const diffDays = Math.round((prevDate - trainDate) / (1000 * 60 * 60 * 24));
+                if (diffDays === 1) {
                     streak++;
                     prevDate = trainDate;
+                } else if (diffDays === 0) {
+                    continue;
                 } else {
                     break;
                 }
             }
         }
         return streak;
-    }
-
-    function updateGritScoreDisplay(gritScore) {
-        const gritDiv = document.getElementById('gritScore');
-        if (gritDiv) {
-            gritDiv.innerHTML = `<strong>All time GRIT Score:</strong> ${gritScore.toFixed(2)}`;
-        }
     }
 
     async function displayAllTimeGritScore() {
@@ -1027,7 +921,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             const t = docSnap.data();
             if (t.trimp) trimpSum += t.trimp;
 
-            // Streak calculation
             if (t.date) {
                 const trainDate = new Date(t.date);
                 if (!prevDate) {
@@ -1040,7 +933,6 @@ document.addEventListener('DOMContentLoaded', async function () {
                         prevDate = trainDate;
                     }
                 }
-                // TRIMP averages
                 const daysAgo = (now - trainDate) / (1000 * 60 * 60 * 24);
                 if (daysAgo <= 7 && t.trimp) {
                     trimp7 += t.trimp;
@@ -1063,10 +955,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             trimpAvg28: avgTrimp28
         });
 
-        // Display on dashboard
-        updateGritScoreDisplay(gritScore);
-
-        // Save to Firestore in a new 'grit' collection
         const gritDocRef = doc(db, "users", user.uid, "grit", "allTime");
         await setDoc(gritDocRef, {
             score: gritScore,
@@ -1088,28 +976,51 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Move previewDiv above lastTrainings
     const lastTrainingsDiv = document.getElementById('lastTrainings');
     if (lastTrainingsDiv) {
-        // Remove previewDiv if already in DOM
         if (previewDiv.parentNode) previewDiv.parentNode.removeChild(previewDiv);
-        // Insert previewDiv before lastTrainingsDiv
         lastTrainingsDiv.parentNode.insertBefore(previewDiv, lastTrainingsDiv);
     } else {
-        // Fallback: append to body if lastTrainingsDiv not found
         document.body.appendChild(previewDiv);
     }
 
-    // Initial preview and last trainings
     updatePreview();
     displayLastTrainings();
-    displayAllTimeGritScore();
-    displayCurrentStreak();
-
-    
 });
 
 // Call this after a training is saved
 async function updateGritScores(userId, newScores) {
-    // newScores: { week: 123, month: 456, year: 789, allTime: 999 }
     for (const period of ['week', 'month', 'year', 'allTime']) {
         await setDoc(doc(db, "users", userId, "grit", period), { score: newScores[period] || 0 });
     }
 }
+
+// Strava integration and auto-fetch today's training
+onAuthStateChanged(auth, (user) => {
+    const statusDiv = document.getElementById('trainingStatus');
+    if (!user) {
+        if (statusDiv) statusDiv.textContent = "Not logged in.";
+        return;
+    }
+    checkAndFetchTodaysTraining(user);
+    toggleAddTrainingForm();
+});
+
+// Listen for changes in Strava connection
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        const stravaDocRef = doc(db, "users", user.uid, "strava", "connection");
+        onSnapshot(stravaDocRef, () => {
+            toggleAddTrainingForm();
+        });
+    }
+});
+
+
+function parseLocalDate(dateStr) {
+    if (!dateStr) return new Date();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+    return new Date(dateStr);
+}
+
