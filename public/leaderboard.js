@@ -132,7 +132,7 @@ function getTopCountries(users, period) {
 
 function renderUsersTable(users, periodLabel, allUsers, currentUsername) {
     let html = `<h3>${periodLabel} - Top 5 Users</h3>`;
-    html += "<table border='1'><tr><th>Rank</th><th>Username</th><th>City</th><th>Country</th><th>GRIT Score</th></tr>";
+    html += `<table class="leaderboard-table"><tr><th>Rank</th><th>Username</th><th>City</th><th>Country</th><th>GRIT Score</th></tr>`;
     users.forEach((u, i) => {
         html += `<tr>
             <td>${i + 1}</td>
@@ -172,7 +172,7 @@ function renderUsersTable(users, periodLabel, allUsers, currentUsername) {
 
 function renderCitiesTable(cities, periodLabel, allUsers, currentUsername) {
     let html = `<h3>${periodLabel} - Top 5 Cities</h3>`;
-    html += "<table border='1'><tr><th>Rank</th><th>City</th><th>Total GRIT Points</th></tr>";
+    html += `<table class="leaderboard-table"><tr><th>Rank</th><th>City</th><th>Total GRIT Points</th></tr>`;
     cities.forEach(({ city, total }, i) => {
         html += `<tr><td>${i + 1}</td><td>${city}</td><td>${total.toFixed(2)}</td></tr>`;
     });
@@ -203,7 +203,7 @@ function renderCitiesTable(cities, periodLabel, allUsers, currentUsername) {
 
 function renderCountriesTable(countries, periodLabel, allUsers, currentUsername) {
     let html = `<h3>${periodLabel} - Top 5 Countries</h3>`;
-    html += "<table border='1'><tr><th>Rank</th><th>Country</th><th>Total GRIT Points</th></tr>";
+    html += `<table class="leaderboard-table"><tr><th>Rank</th><th>Country</th><th>Total GRIT Points</th></tr>`;
     countries.forEach(({ country, total }, i) => {
         html += `<tr><td>${i + 1}</td><td>${country}</td><td>${total.toFixed(2)}</td></tr>`;
     });

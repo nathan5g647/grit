@@ -173,14 +173,41 @@ input:focus, select:focus, textarea:focus {
     font-weight: bold;
 }
 
-/* Center the leaderboard table and its content */
+/* Center the leaderboard table and style it */
 .leaderboard-table {
-    margin-left: auto;
-    margin-right: auto;
+    margin: 24px auto 24px auto;
+    border-collapse: collapse;
+    min-width: 340px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(77,126,168,0.07);
+    overflow: hidden;
+    text-align: center;
+    font-size: 1em;
 }
 
-.leaderboard-table, .leaderboard-table th, .leaderboard-table td {
-    text-align: center;
+.leaderboard-table th, .leaderboard-table td {
+    padding: 12px 18px;
+    border-bottom: 1px solid #e0e6ed;
+}
+
+.leaderboard-table th {
+    background: #4d7ea8;
+    color: #fff;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.leaderboard-table tr:last-child td {
+    border-bottom: none;
+}
+
+.leaderboard-table tr:nth-child(even) td {
+    background: #f7f7f7;
+}
+
+.leaderboard-table td {
+    color: #222;
 }
 
 /* Footer style */
@@ -253,8 +280,8 @@ main {
 }
 
 #profileBadges img, #profileBadges svg {
-  width: 32px;
-  height: 32px;
+  width: 164px;
+  height: 164px;
 }
 
 .tagline {

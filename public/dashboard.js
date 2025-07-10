@@ -8,6 +8,57 @@ const trainingsPerPage = 10;
 
 // --- GLOBAL FUNCTIONS ---
 
+async function getStreak(user, upToDate = null) {
+        const trainingsRef = collection(db, "users", user.uid, "trainings");
+        const q = query(trainingsRef, orderBy("date", "desc"));
+        const querySnapshot = await getDocs(q);
+
+        let streak = 0;
+        let prevDate = null;
+        for (const docSnap of querySnapshot.docs) {
+            const t = docSnap.data();
+            if (!t.date) continue;
+            const trainDate = new Date(t.date.toDate ? t.date.toDate() : t.date);
+            if (upToDate && trainDate > new Date(upToDate)) continue;
+            if (!prevDate) {
+                prevDate = trainDate;
+                streak = 1;
+            } else {
+                const diffDays = Math.round((prevDate - trainDate) / (1000 * 60 * 60 * 24));
+                if (diffDays === 1) {
+                    streak++;
+                    prevDate = trainDate;
+                } else if (diffDays === 0) {
+                    continue;
+                } else {
+                    break;
+                }
+            }
+        }
+        return streak;
+    }
+async function fixTrainingDates() {
+    const user = auth.currentUser;
+    if (!user) return;
+    const trainingsRef = collection(db, "users", user.uid, "trainings");
+    const q = query(trainingsRef);
+    const querySnapshot = await getDocs(q);
+    for (const docSnap of querySnapshot.docs) {
+        const t = docSnap.data();
+        // If date is missing or not in YYYY-MM-DD, fix it using createdAt
+        if (t.createdAt && (!t.date || !/^\d{4}-\d{2}-\d{2}$/.test(t.date))) {
+            const localDate = new Date(t.createdAt);
+            const yyyy = localDate.getFullYear();
+            const mm = String(localDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(localDate.getDate()).padStart(2, '0');
+            const fixedDate = `${yyyy}-${mm}-${dd}`;
+            await setDoc(doc(trainingsRef, docSnap.id), { date: fixedDate }, { merge: true });
+        }
+    }
+    alert("Training dates fixed!");
+}
+
+
 function calcGRIT({ trimp, streak, trimpAvg7, trimpAvg28 }) {
     const safeTrimpAvg28 = trimpAvg28 && trimpAvg28 > 0 ? trimpAvg28 : trimp;
     const safeTrimpAvg7 = trimpAvg7 && trimpAvg7 > 0 ? trimpAvg7 : trimp;
@@ -228,7 +279,10 @@ function addTrainingsNavListeners() {
 // Helper to get today's date in YYYY-MM-DD format
 function getTodayDateString() {
     const today = new Date();
-    return today.toISOString().slice(0, 10);
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
 }
 
 // Fetch today's activities from Strava
@@ -311,7 +365,6 @@ async function checkAndFetchTodaysTraining(user) {
                 trimpAvg28: avgTrimp28
             });
             await setDoc(doc(trainingsRef, lastTraining.id), { gritScore }, { merge: true });
-            console.log('GRIT DEBUG (existing training)', { trimp: lastTraining.trimp, streak, avgTrimp7, avgTrimp28, gritScore });
         }
         if (statusDiv) statusDiv.textContent = "Today's training is loaded.";
         return;
@@ -787,7 +840,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         const trainingData = {
             title: document.getElementById('trainingTitle').value,
-            date: document.getElementById('trainingDate').value,
+            date: document.getElementById('trainingDate').value, // already local YYYY-MM-DD
             type: document.getElementById('trainingType').value,
             intervals: intervals,
             createdAt: new Date().toISOString(),
@@ -871,35 +924,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         return { trimpSum, count, avg: count ? trimpSum / count : 0 };
     }
 
-    async function getStreak(user, upToDate = null) {
-        const trainingsRef = collection(db, "users", user.uid, "trainings");
-        const q = query(trainingsRef, orderBy("date", "desc"));
-        const querySnapshot = await getDocs(q);
-
-        let streak = 0;
-        let prevDate = null;
-        for (const docSnap of querySnapshot.docs) {
-            const t = docSnap.data();
-            if (!t.date) continue;
-            const trainDate = new Date(t.date.toDate ? t.date.toDate() : t.date);
-            if (upToDate && trainDate > new Date(upToDate)) continue;
-            if (!prevDate) {
-                prevDate = trainDate;
-                streak = 1;
-            } else {
-                const diffDays = Math.round((prevDate - trainDate) / (1000 * 60 * 60 * 24));
-                if (diffDays === 1) {
-                    streak++;
-                    prevDate = trainDate;
-                } else if (diffDays === 0) {
-                    continue;
-                } else {
-                    break;
-                }
-            }
-        }
-        return streak;
-    }
+    
 
     async function displayAllTimeGritScore() {
         const user = auth.currentUser;
@@ -1023,4 +1048,5 @@ function parseLocalDate(dateStr) {
     }
     return new Date(dateStr);
 }
+
 

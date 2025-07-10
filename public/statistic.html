@@ -26,6 +26,10 @@
                 <h1>Readiness</h1>
                 <div id="fatigueStats">
                     <p><b>Current Readiness:</b> <span id="currentFatigue">Loading...</span></p>
+                    <p>
+                     <b>Average TRIMP 7 days:</b> <span id="avgTrimp7">Loading...</span><br>
+                     <b>Average TRIMP 28 days:</b> <span id="avgTrimp28">Loading...</span>
+                    </p>
                 </div>
             </section>
             <section>
@@ -254,12 +258,16 @@ async function updateStatsFromCache(period) {
             (trainingDate && isWithinPeriod(trainingDate, period))
         ) {
             totalTrainings++;
+            // Distance
             if (typeof t.distance === 'number') {
                 totalDistance += t.distance;
             } else if (t.intervals && Array.isArray(t.intervals)) {
                 totalDistance += t.intervals.reduce((sum, i) => sum + (parseFloat(i.distance) || 0), 0);
             }
-            if (typeof t.durationMinutes === 'number') {
+            // Duration
+            if (typeof t.duration === 'number') {
+                totalTime += t.duration;
+            } else if (typeof t.durationMinutes === 'number') {
                 totalTime += t.durationMinutes;
             } else if (t.intervals && Array.isArray(t.intervals)) {
                 totalTime += t.intervals.reduce((sum, i) => {
@@ -289,6 +297,7 @@ async function updateStatsFromCache(period) {
     displayFatigue(fatigue);
 }
 
+
 // Button event listeners
 document.querySelectorAll('.periodBtn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -315,6 +324,27 @@ onAuthStateChanged(auth, async (user) => {
     snapshot.forEach(doc => {
         allTrainings.push(doc.data());
     });
+    
+// Calculate avgTrimp7 and avgTrimp28 for allTrainings
+const now = new Date();
+let trimp7 = 0, trimp28 = 0, count7 = 0, count28 = 0;
+allTrainings.forEach(t => {
+    if (!t.trimp || !t.date) return;
+    const d = parseLocalDate(t.date);
+    const daysAgo = (now - d) / (1000 * 60 * 60 * 24);
+    if (daysAgo <= 7) {
+        trimp7 += t.trimp;
+        count7++;
+    }
+    if (daysAgo <= 28) {
+        trimp28 += t.trimp;
+        count28++;
+    }
+});
+const avgTrimp7 = count7 ? trimp7 / count7 : 0;
+const avgTrimp28 = count28 ? trimp28 / count28 : 0;
+document.getElementById('avgTrimp7').textContent = avgTrimp7.toFixed(2);
+document.getElementById('avgTrimp28').textContent = avgTrimp28.toFixed(2);
 
     // Calculate streaks ONCE for all time
     const periodDates = allTrainings

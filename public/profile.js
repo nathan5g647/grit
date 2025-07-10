@@ -182,38 +182,52 @@ onAuthStateChanged(auth, async (user) => {
     } else {
         lastTrainingsHtml = "<table border='1' style='margin:0 auto;'><tr><th>Type</th><th>Duration</th><th>Distance (km)</th><th>GRIT</th></tr>";
         last3.forEach(t => {
-            const type = t.type ? t.type.charAt(0).toUpperCase() + t.type.slice(1) : '-';
-            // --- Duration logic ---
-            let durationValue = "-";
-            if (t.duration) {
-                durationValue = t.duration;
-            } else if (typeof t.durationMinutes === "number" && t.durationMinutes > 0) {
-                durationValue = formatTime(t.durationMinutes);
-            } else if (t.intervals && Array.isArray(t.intervals)) {
-                let totalMinutes = 0;
-                t.intervals.forEach(i => {
-                    if (i.duration) {
-                        const parts = i.duration.split(":").map(Number);
-                        if (parts.length === 3) {
-                            totalMinutes += parts[0] * 60 + parts[1] + parts[2] / 60;
-                        } else if (parts.length === 2) {
-                            totalMinutes += parts[0] + parts[1] / 60;
-                        } else if (parts.length === 1) {
-                            totalMinutes += parts[0];
-                        }
-                    }
-                });
-                if (totalMinutes > 0) durationValue = formatTime(totalMinutes);
+    const type = t.type ? t.type.charAt(0).toUpperCase() + t.type.slice(1) : '-';
+    // --- Duration logic ---
+    let durationValue = "-";
+    let durationMinutes = null;
+    if (typeof t.duration === "number") {
+        durationMinutes = t.duration;
+    } else if (typeof t.durationMinutes === "number" && t.durationMinutes > 0) {
+        durationMinutes = t.durationMinutes;
+    } else if (t.intervals && Array.isArray(t.intervals)) {
+        let totalMinutes = 0;
+        t.intervals.forEach(i => {
+            if (i.duration) {
+                const parts = i.duration.split(":").map(Number);
+                if (parts.length === 3) {
+                    totalMinutes += parts[0] * 60 + parts[1] + parts[2] / 60;
+                } else if (parts.length === 2) {
+                    totalMinutes += parts[0] + parts[1] / 60;
+                } else if (parts.length === 1) {
+                    totalMinutes += parts[0];
+                }
             }
-            // --- End duration logic ---
-            lastTrainingsHtml += `<tr>
-                <td>${type}</td>
-                <td>${durationValue}</td>
-                <td>${t.distance !== undefined ? t.distance : (t.intervals ? t.intervals.reduce((sum, i) => sum + (parseFloat(i.distance) || 0), 0).toFixed(2) : '-')}</td>
-                <td>${(t.gritPoints || t.gritScore || t.grit || 0).toFixed(2)}</td>
-            </tr>`;
         });
-        lastTrainingsHtml += "</table>";
+        if (totalMinutes > 0) durationMinutes = totalMinutes;
+    }
+    if (durationMinutes !== null) {
+        durationValue = Number(durationMinutes).toFixed(2) + " min";
+    }
+
+    // --- End duration logic ---
+    let distanceValue = "-";
+    if (typeof t.distance === "number") {
+        distanceValue = t.distance.toFixed(2);
+    } else if (t.intervals && Array.isArray(t.intervals)) {
+        const totalDist = t.intervals.reduce((sum, i) => sum + (parseFloat(i.distance) || 0), 0);
+        distanceValue = totalDist.toFixed(2);
+    }
+
+    let gritValue = (t.gritPoints || t.gritScore || t.grit || 0).toFixed(2);
+
+    lastTrainingsHtml += `<tr>
+        <td>${type}</td>
+        <td>${durationValue}</td>
+        <td>${distanceValue}</td>
+        <td>${gritValue}</td>
+    </tr>`;
+});
     }
     document.getElementById('lastTrainings').innerHTML = lastTrainingsHtml;
 
@@ -321,8 +335,8 @@ onAuthStateChanged(auth, async (user) => {
                 img.src = `image/badge-${period}.png`;
                 img.alt = `${period} winner badge`;
                 img.title = `Winner (${period.charAt(0).toUpperCase() + period.slice(1)})`;
-                img.style.width = "32px";
-                img.style.height = "32px";
+                img.style.width = "128px";
+                img.style.height = "128px";
                 badgeDiv.appendChild(img);
             }
         }
