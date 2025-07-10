@@ -76,6 +76,14 @@ form.onsubmit = async (e) => {
 
     await setDoc(docRef, mergedData, { merge: true });
     displaySettingsAsText(mergedData);
+
+    // Update public profile data (username, city, etc.)
+    const publicProfileRef = doc(db, "users", user.uid, "profile");
+    await setDoc(publicProfileRef, {
+        username: document.getElementById('username')?.value || '',
+        city: document.getElementById('city')?.value || '',
+        // add other public fields as needed
+    }, { merge: true });
 };
 
 // Show/hide logout button
