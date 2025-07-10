@@ -177,57 +177,59 @@ onAuthStateChanged(auth, async (user) => {
     const last3 = trainings.slice(0, 3);
 
     let lastTrainingsHtml = "";
+    // --- Last 3 Trainings Table ---
     if (last3.length === 0) {
         lastTrainingsHtml = "<p>No trainings found.</p>";
     } else {
-        lastTrainingsHtml = "<table border='1' style='margin:0 auto;'><tr><th>Type</th><th>Duration</th><th>Distance (km)</th><th>GRIT</th></tr>";
+        lastTrainingsHtml = `<table class="leaderboard-table"><tr><th>Type</th><th>Duration</th><th>Distance (km)</th><th>GRIT</th></tr>`;
         last3.forEach(t => {
-    const type = t.type ? t.type.charAt(0).toUpperCase() + t.type.slice(1) : '-';
-    // --- Duration logic ---
-    let durationValue = "-";
-    let durationMinutes = null;
-    if (typeof t.duration === "number") {
-        durationMinutes = t.duration;
-    } else if (typeof t.durationMinutes === "number" && t.durationMinutes > 0) {
-        durationMinutes = t.durationMinutes;
-    } else if (t.intervals && Array.isArray(t.intervals)) {
-        let totalMinutes = 0;
-        t.intervals.forEach(i => {
-            if (i.duration) {
-                const parts = i.duration.split(":").map(Number);
-                if (parts.length === 3) {
-                    totalMinutes += parts[0] * 60 + parts[1] + parts[2] / 60;
-                } else if (parts.length === 2) {
-                    totalMinutes += parts[0] + parts[1] / 60;
-                } else if (parts.length === 1) {
-                    totalMinutes += parts[0];
-                }
+            const type = t.type ? t.type.charAt(0).toUpperCase() + t.type.slice(1) : '-';
+            // --- Duration logic ---
+            let durationValue = "-";
+            let durationMinutes = null;
+            if (typeof t.duration === "number") {
+                durationMinutes = t.duration;
+            } else if (typeof t.durationMinutes === "number" && t.durationMinutes > 0) {
+                durationMinutes = t.durationMinutes;
+            } else if (t.intervals && Array.isArray(t.intervals)) {
+                let totalMinutes = 0;
+                t.intervals.forEach(i => {
+                    if (i.duration) {
+                        const parts = i.duration.split(":").map(Number);
+                        if (parts.length === 3) {
+                            totalMinutes += parts[0] * 60 + parts[1] + parts[2] / 60;
+                        } else if (parts.length === 2) {
+                            totalMinutes += parts[0] + parts[1] / 60;
+                        } else if (parts.length === 1) {
+                            totalMinutes += parts[0];
+                        }
+                    }
+                });
+                if (totalMinutes > 0) durationMinutes = totalMinutes;
             }
+            if (durationMinutes !== null) {
+                durationValue = Number(durationMinutes).toFixed(2) + " min";
+            }
+
+            // --- End duration logic ---
+            let distanceValue = "-";
+            if (typeof t.distance === "number") {
+                distanceValue = t.distance.toFixed(2);
+            } else if (t.intervals && Array.isArray(t.intervals)) {
+                const totalDist = t.intervals.reduce((sum, i) => sum + (parseFloat(i.distance) || 0), 0);
+                distanceValue = totalDist.toFixed(2);
+            }
+
+            let gritValue = (t.gritPoints || t.gritScore || t.grit || 0).toFixed(2);
+
+            lastTrainingsHtml += `<tr>
+                <td>${type}</td>
+                <td>${durationValue}</td>
+                <td>${distanceValue}</td>
+                <td>${gritValue}</td>
+            </tr>`;
         });
-        if (totalMinutes > 0) durationMinutes = totalMinutes;
-    }
-    if (durationMinutes !== null) {
-        durationValue = Number(durationMinutes).toFixed(2) + " min";
-    }
-
-    // --- End duration logic ---
-    let distanceValue = "-";
-    if (typeof t.distance === "number") {
-        distanceValue = t.distance.toFixed(2);
-    } else if (t.intervals && Array.isArray(t.intervals)) {
-        const totalDist = t.intervals.reduce((sum, i) => sum + (parseFloat(i.distance) || 0), 0);
-        distanceValue = totalDist.toFixed(2);
-    }
-
-    let gritValue = (t.gritPoints || t.gritScore || t.grit || 0).toFixed(2);
-
-    lastTrainingsHtml += `<tr>
-        <td>${type}</td>
-        <td>${durationValue}</td>
-        <td>${distanceValue}</td>
-        <td>${gritValue}</td>
-    </tr>`;
-});
+        lastTrainingsHtml += "</table>";
     }
     document.getElementById('lastTrainings').innerHTML = lastTrainingsHtml;
 
@@ -278,7 +280,7 @@ onAuthStateChanged(auth, async (user) => {
 
     // Display leaderboard positions
     let leaderboardHtml = `
-        <table border='1' style='margin:0 auto;'>
+        <table class="leaderboard-table">
             <tr>
                 <th>Period</th>
                 <th>${isSelf ? "Your" : "Their"} Rank</th>

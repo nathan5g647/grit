@@ -5,7 +5,13 @@
     <title>Dashboard</title>
     <link rel="stylesheet" href="style.css" />
 </head>
-
+<div id="powerUpModal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.7);z-index:9999;justify-content:center;align-items:center;">
+  <div id="powerUpModalContent" style="background:#fff;padding:30px 20px;border-radius:10px;max-width:400px;width:90%;text-align:center;position:relative;">
+    <h3>🎁 Your Power-Ups!</h3>
+    <div id="powerUpModalList"></div>
+    <button id="closePowerUpModal" style="margin-top:20px;padding:8px 24px;font-size:1.1em;">Close</button>
+  </div>
+</div>
 <body>
      <header style="margin-bottom: 24px; padding-bottom: 10px;">
      <div class="grit-logo">
@@ -63,8 +69,15 @@
 </div>
 
     <div id="lastTrainings"></div> 
+    <section id="weeklyPowerUps">
+  <h2>Weekly Challenges</h2>
+  <div id="powerUpSelection"></div>
+  <div id="selectedPowerUps"></div>
+  <button id="getPowerUpsBtn" style="margin-bottom:15px;">GET YOUR FREE CHALLENGES</button>
+</section>
 
 <script type="module" src="dashboard.js"></script>
+<script type="module" src="powerups.js"></script>
 <script type="module">
 
 </script>

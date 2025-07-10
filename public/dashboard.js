@@ -1,12 +1,15 @@
 import { auth, db } from './script.js';
-import { doc, getDoc, collection, addDoc, query, orderBy, getDocs, setDoc, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+import { doc, getDoc, collection, addDoc, query, orderBy, getDocs, setDoc, where, onSnapshot, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
+import { POWER_UPS, getPowerUpProgress, getWeeklyPowerUps, renderPowerUpProgress } from './powerups.js';
 let selectedTrainingIndex = null;
 let trainingsCache = [];
 let currentPage = 0;
 const trainingsPerPage = 10;
 
 // --- GLOBAL FUNCTIONS ---
+
+
 
 async function getStreak(user, upToDate = null) {
         const trainingsRef = collection(db, "users", user.uid, "trainings");
@@ -206,6 +209,13 @@ function showTrainingDetails(training) {
         });
         html += `</ul>`;
     }
+    if (training.activeBonuses && training.activeBonuses.length > 0) {
+        html += `<strong>Active Bonuses:</strong><ul>`;
+        training.activeBonuses.forEach(bonus => {
+            html += `<li>${bonus}</li>`;
+        });
+        html += `</ul>`;
+    }
     html += `</div>`;
     detailsDiv.innerHTML = html;
 
@@ -326,6 +336,8 @@ async function checkAndFetchTodaysTraining(user) {
     const todayStr = getTodayDateString();
     const q = query(trainingsRef, where("date", "==", todayStr));
     const querySnapshot = await getDocs(q);
+    
+    
 
     if (!querySnapshot.empty) {
         // Even if today's training exists, update its GRIT score!
@@ -462,14 +474,39 @@ async function checkAndFetchTodaysTraining(user) {
                 const avgTrimp7 = count7 ? trimp7 / count7 : trimp;
                 const avgTrimp28 = count28 ? trimp28 / count28 : trimp;
                 const streak = await getStreak(user);
-                const gritScore = calcGRIT({
+                let gritScore = calcGRIT({
                     trimp: trimp,
                     streak: streak,
                     trimpAvg7: avgTrimp7,
                     trimpAvg28: avgTrimp28
                 });
-                console.log('GRIT DEBUG', { trimp, streak, avgTrimp7, avgTrimp28, gritScore });
-                await setDoc(trainingRef, { gritScore }, { merge: true });
+                let activeBonuses = [];
+
+                if (hasKOMorTrophy(activity)) {
+                    gritScore *= 1.5;
+                    activeBonuses.push("KOM/QOM/CR or Top 10 Trophy");
+                }
+                if (activity.total_elevation_gain && activity.total_elevation_gain >= 500) {
+                    gritScore *= 1.1;
+                    activeBonuses.push("Elevation 500m+");
+                }
+                
+                
+                const avgSpeed = activity.average_speed ? activity.average_speed * 3.6 : 0;
+                if (avgSpeed > 12 && activity.type === "Run") {
+                    gritScore *= 1.05;
+                    activeBonuses.push("Fast Run");
+                }
+                if (avgSpeed > 30 && activity.type === "Ride") {
+                    gritScore *= 1.05;
+                    activeBonuses.push("Fast Ride");
+                }
+           
+                if (activities.length > 1) {
+                    gritScore *= 1.1;
+                    activeBonuses.push("Double Session Day");
+                }
+                await setDoc(trainingRef, { gritScore, activeBonuses }, { merge: true });
             }
             if (statusDiv) statusDiv.textContent = "Today's Strava training loaded!";
             trainingsCache = [];
@@ -840,7 +877,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         const trainingData = {
             title: document.getElementById('trainingTitle').value,
-            date: document.getElementById('trainingDate').value, // already local YYYY-MM-DD
+            date: document.getElementById('trainingDate').value, // already YYYY-MM-DD
             type: document.getElementById('trainingType').value,
             intervals: intervals,
             createdAt: new Date().toISOString(),
@@ -1009,6 +1046,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     updatePreview();
     displayLastTrainings();
+  
 });
 
 // Call this after a training is saved
@@ -1022,31 +1060,252 @@ async function updateGritScores(userId, newScores) {
 onAuthStateChanged(auth, (user) => {
     const statusDiv = document.getElementById('trainingStatus');
     if (!user) {
-        if (statusDiv) statusDiv.textContent = "Not logged in.";
+        if (statusDiv) statusDiv.textContent = "Please log in to Strava to fetch today's training.";
+        localStorage.removeItem('userPowerUps');
+        localStorage.removeItem('userPowerUpsProgress');
         return;
     }
-    checkAndFetchTodaysTraining(user);
-    toggleAddTrainingForm();
+    const stravaDocRef = doc(db, "users", user.uid, "strava", "connection");
+    getDoc(stravaDocRef).then(stravaDoc => {
+        if (stravaDoc.exists() && stravaDoc.data().connected) {
+            // Auto-fetch today's training from Strava
+            checkAndFetchTodaysTraining(user);
+        } else {
+            if (statusDiv) statusDiv.textContent = "Strava not connected. Please connect your Strava account.";
+        }
+    });
+    displayWeeklyPowerUps();
 });
 
-// Listen for changes in Strava connection
-onAuthStateChanged(auth, (user) => {
-    if (user) {
-        const stravaDocRef = doc(db, "users", user.uid, "strava", "connection");
-        onSnapshot(stravaDocRef, () => {
-            toggleAddTrainingForm();
-        });
-    }
-});
-
-
-function parseLocalDate(dateStr) {
-    if (!dateStr) return new Date();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        const [y, m, d] = dateStr.split('-').map(Number);
-        return new Date(y, m - 1, d);
-    }
-    return new Date(dateStr);
+// Helper: Get start of current week (Monday)
+function getWeekStartDate() {
+    const now = new Date();
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(now.setHours(0,0,0,0)).setDate(diff);
 }
+
+// Fetch all trainings for this week
+async function fetchThisWeeksTrainings(user) {
+    const trainingsRef = collection(db, "users", user.uid, "trainings");
+    const q = query(trainingsRef, orderBy("date", "desc"));
+    const querySnapshot = await getDocs(q);
+
+    // Calculate Monday of this week
+    const now = new Date();
+    const day = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - ((day + 6) % 7)); // Monday as start of week
+    monday.setHours(0, 0, 0, 0);
+
+    const weekTrainings = [];
+    const allTrainings = [];
+    querySnapshot.forEach(docSnap => {
+        const t = docSnap.data();
+        allTrainings.push(t);
+        if (t.date) {
+            const [year, month, day] = t.date.split('-').map(Number);
+            const trainDate = new Date(year, month - 1, day);
+            trainDate.setHours(0,0,0,0);
+            if (trainDate >= monday) {
+                weekTrainings.push({
+                    ...t,
+                    start_date_local: t.date + "T00:00:00"
+                });
+            }
+        }
+    });
+    return weekTrainings;
+}
+
+// Render power-up progress bars
+async function displayWeeklyPowerUps() {
+    const user = auth.currentUser;
+    let userPowerUps = [];
+    let activities = [];
+    if (user) {
+        userPowerUps = await getCurrentUserPowerUps(user);
+        activities = await fetchThisWeeksTrainings(user);
+    } else {
+        const local = localStorage.getItem('userPowerUps');
+        userPowerUps = local ? JSON.parse(local) : [];
+        activities = [];
+    }
+    // Try to get saved progress
+    let progressArr = await getSavedPowerUpProgress(user);
+
+    // If not found, mismatched length, or mismatched targets, recalculate and save
+    let needsRecalc = !progressArr || progressArr.length !== userPowerUps.length;
+    if (!needsRecalc) {
+        for (let i = 0; i < progressArr.length; i++) {
+            if (progressArr[i].target !== userPowerUps[i].target) {
+                needsRecalc = true;
+                break;
+            }
+        }
+    }
+    if (needsRecalc) {
+        progressArr = userPowerUps.map(pu => getPowerUpProgress(pu, activities));
+        if (user) await savePowerUpProgressToFirestore(user, progressArr);
+        localStorage.setItem('userPowerUpsProgress', JSON.stringify(progressArr));
+    }
+    // Render
+    const html = userPowerUps.map((pu, i) => {
+        const progress = progressArr[i];
+        return renderPowerUpProgress(pu, progress);
+    }).join('');
+    document.getElementById('powerUpSelection').innerHTML = html;
+}
+
+// Fetch the latest claimed power-ups from Firestore
+async function getCurrentUserPowerUps(user) {
+    const weeklyPowerUpsRef = collection(db, "users", user.uid, "weeklyPowerUps");
+    const q = query(weeklyPowerUpsRef, orderBy("claimedAt", "desc"));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+        // Get the most recent document
+        const latest = snapshot.docs[0].data();
+        if (latest && latest.powerUps) {
+            // Also update localStorage for offline use
+            localStorage.setItem('userPowerUps', JSON.stringify(latest.powerUps));
+            return latest.powerUps;
+        }
+    }
+    // Fallback to localStorage if nothing in Firestore
+    const local = localStorage.getItem('userPowerUps');
+    return local ? JSON.parse(local) : [];
+}
+
+// Show the ad and then the power-ups popup
+function showAdAndGivePowerUps() {
+    const btn = document.getElementById('getPowerUpsBtn');
+    if (localStorage.getItem('userPowerUps')) {
+        if (!confirm("Rerolling will replace your current challenges for this week. Continue?")) {
+            btn.disabled = false;
+            btn.textContent = "REROLL CHALLENGES";
+            return;
+        }
+    }
+    btn.disabled = true;
+    btn.textContent = "Ad playing... (30s)";
+    let seconds = 30;
+    const interval = setInterval(() => {
+        seconds--;
+        btn.textContent = `Ad playing... (${seconds}s)`;
+        if (seconds <= 0) {
+            clearInterval(interval);
+            btn.style.display = "none";
+            givePowerUpsPopup();
+        }
+    }, 1000);
+}
+
+// Give 3 random power-ups and show popup
+async function givePowerUpsPopup() {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    // Delete all previous weeklyPowerUps
+    const weeklyPowerUpsRef = collection(db, "users", user.uid, "weeklyPowerUps");
+    const oldPowerUpsSnap = await getDocs(weeklyPowerUpsRef);
+    for (const docSnap of oldPowerUpsSnap.docs) {
+        await deleteDoc(docSnap.ref);
+    }
+
+    const powerUps = getWeeklyPowerUps();
+
+    // Save to Firestore: users/{uid}/weeklyPowerUps
+    try {
+        const sanitizedPowerUps = powerUps.map(pu => ({
+            name: pu.name,
+            description: pu.description,
+            type: pu.type,
+            activity: pu.activity || null,
+            target: pu.target,
+            rarity: pu.rarity,
+            multiplier: pu.multiplier
+        }));
+
+        await addDoc(
+            collection(db, "users", user.uid, "weeklyPowerUps"),
+            {
+                powerUps: sanitizedPowerUps,
+                claimedAt: serverTimestamp()
+            }
+        );
+    } catch (e) {
+        alert("Failed to save power-ups to Firestore: " + e.message);
+    }
+
+    // Save to localStorage for UI logic
+    localStorage.setItem('userPowerUps', JSON.stringify(powerUps));
+    displayWeeklyPowerUps();
+
+    // Show popup
+    const modal = document.getElementById('powerUpModal');
+    const listDiv = document.getElementById('powerUpModalList');
+    listDiv.innerHTML = powerUps.map(pu => `
+        <div style="margin:12px 0;padding:10px;border-radius:8px;background:#f5f5f5;">
+            <strong>${pu.name}</strong> <span style="color:#888;">(${pu.rarity})</span><br>
+            <em>${pu.description}</em><br>
+            <span style="color:#2196f3;">Bonus: x${pu.multiplier}</span>
+        </div>
+    `).join('');
+    modal.style.display = "flex";
+    document.getElementById('closePowerUpModal').onclick = () => {
+        modal.style.display = "none";
+    };
+}
+
+// Button event
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('getPowerUpsBtn');
+    if (btn) {
+        // Change button text if already claimed
+        if (localStorage.getItem('userPowerUps')) {
+            btn.textContent = "REROLL CHALLENGES";
+        } else {
+            btn.textContent = "GET YOUR FREE CHALLENGES";
+        }
+        btn.style.display = "inline-block";
+        btn.disabled = false;
+        btn.onclick = showAdAndGivePowerUps;
+    }
+});
+
+
+
+async function savePowerUpProgressToFirestore(user, progressArr) {
+    if (!user) return;
+    try {
+        await setDoc(
+            doc(db, "users", user.uid, "weeklyPowerUpsProgress", "current"),
+            { progress: progressArr, updatedAt: new Date().toISOString() }
+        );
+    } catch (e) {
+        console.error("Failed to save power-up progress:", e);
+    }
+}
+
+
+
+async function getSavedPowerUpProgress(user) {
+    if (!user) {
+        const local = localStorage.getItem('userPowerUpsProgress');
+        return local ? JSON.parse(local) : [];
+    }
+    try {
+        const docSnap = await getDoc(doc(db, "users", user.uid, "weeklyPowerUpsProgress", "current"));
+        if (docSnap.exists() && docSnap.data().progress) {
+            localStorage.setItem('userPowerUpsProgress', JSON.stringify(docSnap.data().progress));
+            return docSnap.data().progress;
+        }
+    } catch (e) {
+        // fallback to localStorage
+    }
+    const local = localStorage.getItem('userPowerUpsProgress');
+    return local ? JSON.parse(local) : [];
+}
+
 
 

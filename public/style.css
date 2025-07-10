@@ -239,6 +239,43 @@ ul, ol {
     margin-left: 0;
 }
 
+/* Weekly Power-Ups section */
+#weeklyPowerUps {
+    background: #f8fafc;
+    border-radius: 14px;
+    padding: 24px 18px 18px 18px;
+    margin: 32px auto 0 auto;
+    max-width: 480px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+#weeklyPowerUps h2 {
+    text-align: center;
+    color: #2d3a4a;
+    margin-bottom: 18px;
+    font-size: 1.5em;
+    letter-spacing: 1px;
+}
+.powerup-card {
+    margin-bottom: 18px;
+}
+#getPowerUpsBtn {
+    display: block;
+    margin: 24px auto 0 auto;
+    background: #b71c1c;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 36px;
+    font-size: 1.1em;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    transition: background 0.2s;
+}
+#getPowerUpsBtn:hover:enabled {
+    background: #d32f2f;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
     main {
